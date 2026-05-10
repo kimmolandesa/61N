@@ -7,7 +7,6 @@ const OVERPASS_APIS = [
 ];
 
 const TIMEOUT_MS = 30000;
-const MAX_RESULTS = 1000;
 const USER_AGENT = 'Sightline/1.0 (+https://github.com/ni5arga/sightline)';
 
 interface OverpassElement {
@@ -78,7 +77,7 @@ export function buildOverpassQuery(
 (
 ${unionParts.join('\n')}
 );
-out center ${MAX_RESULTS};
+out center;
 `.trim();
 
   return query;
@@ -105,7 +104,7 @@ export function buildMultiTypeQuery(
   way["operator"~"${operator}",i]${locationFilter};
   relation["operator"~"${operator}",i]${locationFilter};
 );
-out center ${MAX_RESULTS};
+out center;
 `.trim();
 
   return query;
