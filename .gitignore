@@ -81,3 +81,8 @@ logs
 *.geojson
 *.osm
 skills/
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
