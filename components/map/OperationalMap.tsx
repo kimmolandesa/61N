@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, {
-  type GeoJSONSource,
-  type LngLatBoundsLike,
-} from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type LngLatBoundsLike } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   TerraDraw,
@@ -16,16 +13,24 @@ import {
   type GeoJSONStoreFeatures,
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import type { Asset } from "@/lib/types";
-import type { IntelFeature } from "@/lib/intel/types";
-import type { WeatherForecastEntry } from "@/lib/intel/weather";
-import type { AoiDrawMode, AoiSelection, AoiShapeType } from "@/lib/aoi/types";
 import AssetInfoModal from "@/components/AssetInfoModal";
+import type { Asset } from "@/lib/types";
+import type { IntelFeature, IntelGeometry } from "@/lib/intel/types";
+import type { WeatherForecastEntry } from "@/lib/intel/weather";
+import type {
+  AoiDrawMode,
+  AoiSelection,
+  AoiShapeType,
+  SectionIntelFeatureCollection,
+  SectionIntelFeatureProperties,
+} from "@/lib/aoi/types";
 import { BASE_MAPS_BY_ID, type BaseMapId } from "@/lib/map/baseMaps";
 
 interface OperationalMapProps {
   results: Asset[];
   weatherFeatures: IntelFeature[];
+  areaSearchResults: Asset[];
+  selectedSectionIntel: SectionIntelFeatureCollection | null;
   bounds: [number, number, number, number] | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -67,17 +72,18 @@ interface AoiFeatureProperties {
   selected: boolean;
 }
 
+interface IntelMapFeatureProperties extends SectionIntelFeatureProperties {
+  id: string;
+  popupHtml: string;
+}
+
 const DEFAULT_CENTER: [number, number] = [0, 20];
 const DEFAULT_ZOOM = 2;
 const FOCUSED_ZOOM = 13;
 
 const RESULTS_SOURCE_ID = "sightline-results";
-const RESULTS_CLUSTER_SOURCE_ID = "sightline-results-clusters";
 const RESULTS_LAYER_ID = "sightline-results-points";
 const RESULTS_SELECTED_LAYER_ID = "sightline-results-selected";
-const RESULTS_PLAIN_LAYER_ID = "sightline-results-plain";
-const RESULTS_CLUSTER_LAYER_ID = "sightline-results-cluster-circles";
-const RESULTS_CLUSTER_COUNT_LAYER_ID = "sightline-results-cluster-count";
 const WEATHER_SOURCE_ID = "sightline-weather";
 const WEATHER_CIRCLE_LAYER_ID = "sightline-weather-circles";
 const WEATHER_ICON_LAYER_ID = "sightline-weather-icons";
@@ -85,12 +91,29 @@ const AOI_SOURCE_ID = "aoi-collection";
 const AOI_FILL_LAYER_ID = "aoi-fill";
 const AOI_OUTLINE_LAYER_ID = "aoi-outline";
 const AOI_SELECTED_OUTLINE_LAYER_ID = "aoi-selected-outline";
+const AREA_SEARCH_SOURCE_ID = "aoi-search-results";
+const AREA_SEARCH_LAYER_ID = "aoi-search-points";
+const INTEL_SOURCE_ID = "selected-section-intel";
+const INTEL_POINT_LAYER_ID = "selected-section-intel-points";
+const INTEL_LINE_LAYER_ID = "selected-section-intel-lines";
+const INTEL_FILL_LAYER_ID = "selected-section-intel-polygons";
+const INTEL_FILL_OUTLINE_LAYER_ID = "selected-section-intel-polygon-outline";
+
 const WEATHER_ICONS: Record<string, string> = {
   clear: "☀",
   clouds: "☁",
   rain: "☂",
   snow: "❄",
 };
+
+function emptyFeatureCollection(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
+function asGeoJSONSource(map: maplibregl.Map, sourceId: string): GeoJSONSource | null {
+  const source = map.getSource(sourceId);
+  return source && "setData" in source ? (source as GeoJSONSource) : null;
+}
 
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
@@ -182,13 +205,35 @@ function createWeatherPopupHtml(feature: IntelFeature): string {
   `;
 }
 
-function emptyFeatureCollection(): GeoJSON.FeatureCollection {
-  return { type: "FeatureCollection", features: [] };
-}
+function createIntelPopupHtml(properties: SectionIntelFeatureProperties): string {
+  const safeName = escapeHtml(
+    typeof properties.name === "string" ? properties.name : "Intel feature",
+  );
+  const safeSource = escapeHtml(
+    typeof properties.source === "string" ? properties.source : "Unknown source",
+  );
+  const safeCategory = escapeHtml(
+    typeof properties.category === "string" ? properties.category : "unknown",
+  );
+  const rows = Object.entries(properties)
+    .filter(([key]) => !["name", "source", "category", "sectionId"].includes(key))
+    .slice(0, 6)
+    .map(
+      ([key, value]) =>
+        `<tr><td class="popup-key">${escapeHtml(key)}</td><td class="popup-value">${escapeHtml(
+          typeof value === "string" ? value : JSON.stringify(value),
+        )}</td></tr>`,
+    )
+    .join("");
 
-function asGeoJSONSource(map: maplibregl.Map, sourceId: string): GeoJSONSource | null {
-  const source = map.getSource(sourceId);
-  return source && "setData" in source ? (source as GeoJSONSource) : null;
+  return `
+    <div class="map-popup">
+      <div class="popup-title">${safeName}</div>
+      <div class="popup-type">${safeCategory}</div>
+      <div class="popup-operator">${safeSource}</div>
+      ${rows ? `<table class="popup-tags">${rows}</table>` : ""}
+    </div>
+  `;
 }
 
 function asAoiGeometry(
@@ -206,15 +251,12 @@ function terraModeFromShapeType(shapeType: AoiShapeType): string {
   if (shapeType === "rectangle") {
     return "rectangle";
   }
-
   if (shapeType === "circle") {
     return "circle";
   }
-
   if (shapeType === "freehand") {
     return "freehand";
   }
-
   return "polygon";
 }
 
@@ -223,15 +265,12 @@ function shapeTypeFromFeature(feature: GeoJSONStoreFeatures): AoiShapeType {
   if (mode.includes("rectangle")) {
     return "rectangle";
   }
-
   if (mode.includes("circle")) {
     return "circle";
   }
-
   if (mode.includes("freehand")) {
     return "freehand";
   }
-
   return "polygon";
 }
 
@@ -240,16 +279,6 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
     map.addSource(RESULTS_SOURCE_ID, {
       type: "geojson",
       data: emptyFeatureCollection(),
-    });
-  }
-
-  if (!map.getSource(RESULTS_CLUSTER_SOURCE_ID)) {
-    map.addSource(RESULTS_CLUSTER_SOURCE_ID, {
-      type: "geojson",
-      data: emptyFeatureCollection(),
-      cluster: true,
-      clusterRadius: 50,
-      clusterMaxZoom: 13,
     });
   }
 
@@ -267,42 +296,117 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
     });
   }
 
-  if (!map.getLayer(RESULTS_CLUSTER_LAYER_ID)) {
+  if (!map.getSource(AREA_SEARCH_SOURCE_ID)) {
+    map.addSource(AREA_SEARCH_SOURCE_ID, {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getSource(INTEL_SOURCE_ID)) {
+    map.addSource(INTEL_SOURCE_ID, {
+      type: "geojson",
+      data: emptyFeatureCollection(),
+    });
+  }
+
+  if (!map.getLayer(INTEL_FILL_LAYER_ID)) {
     map.addLayer({
-      id: RESULTS_CLUSTER_LAYER_ID,
+      id: INTEL_FILL_LAYER_ID,
+      type: "fill",
+      source: INTEL_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: {
+        "fill-color": [
+          "match",
+          ["get", "category"],
+          "terrain",
+          "#166534",
+          "population",
+          "#7c3aed",
+          "weather",
+          "#0f766e",
+          "telecom",
+          "#1d4ed8",
+          "satellite",
+          "#7c2d12",
+          "#475569",
+        ],
+        "fill-opacity": 0.18,
+      },
+    });
+  }
+
+  if (!map.getLayer(INTEL_FILL_OUTLINE_LAYER_ID)) {
+    map.addLayer({
+      id: INTEL_FILL_OUTLINE_LAYER_ID,
+      type: "line",
+      source: INTEL_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "Polygon"],
+      paint: {
+        "line-color": "#334155",
+        "line-width": 2,
+        "line-opacity": 0.85,
+      },
+    });
+  }
+
+  if (!map.getLayer(INTEL_LINE_LAYER_ID)) {
+    map.addLayer({
+      id: INTEL_LINE_LAYER_ID,
+      type: "line",
+      source: INTEL_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "LineString"],
+      paint: {
+        "line-color": [
+          "match",
+          ["get", "category"],
+          "infrastructure",
+          "#ef4444",
+          "terrain",
+          "#15803d",
+          "telecom",
+          "#2563eb",
+          "#f59e0b",
+        ],
+        "line-width": 3,
+        "line-opacity": 0.9,
+      },
+    });
+  }
+
+  if (!map.getLayer(INTEL_POINT_LAYER_ID)) {
+    map.addLayer({
+      id: INTEL_POINT_LAYER_ID,
       type: "circle",
-      source: RESULTS_CLUSTER_SOURCE_ID,
-      filter: ["has", "point_count"],
+      source: INTEL_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "Point"],
       paint: {
-        "circle-color": ["step", ["get", "point_count"], "#3b82f6", 10, "#f59e0b", 100, "#ef4444"],
-        "circle-radius": ["step", ["get", "point_count"], 18, 10, 24, 100, 32],
-        "circle-stroke-color": "#0d1117",
-        "circle-stroke-width": 2,
-        "circle-opacity": 0.92,
+        "circle-radius": 6,
+        "circle-color": [
+          "match",
+          ["get", "category"],
+          "weather",
+          "#0f766e",
+          "terrain",
+          "#166534",
+          "population",
+          "#7c3aed",
+          "telecom",
+          "#2563eb",
+          "satellite",
+          "#92400e",
+          "#ef4444",
+        ],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5,
       },
     });
   }
 
-  if (!map.getLayer(RESULTS_CLUSTER_COUNT_LAYER_ID)) {
+  if (!map.getLayer(RESULTS_LAYER_ID)) {
     map.addLayer({
-      id: RESULTS_CLUSTER_COUNT_LAYER_ID,
-      type: "symbol",
-      source: RESULTS_CLUSTER_SOURCE_ID,
-      filter: ["has", "point_count"],
-      layout: {
-        "text-field": ["get", "point_count_abbreviated"],
-        "text-font": ["Open Sans Semibold"],
-        "text-size": 12,
-      },
-      paint: {
-        "text-color": "#f8fafc",
-      },
-    });
-  }
-
-  if (!map.getLayer(RESULTS_PLAIN_LAYER_ID)) {
-    map.addLayer({
-      id: RESULTS_PLAIN_LAYER_ID,
+      id: RESULTS_LAYER_ID,
       type: "circle",
       source: RESULTS_SOURCE_ID,
       paint: {
@@ -314,16 +418,15 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
     });
   }
 
-  if (!map.getLayer(RESULTS_LAYER_ID)) {
+  if (!map.getLayer(AREA_SEARCH_LAYER_ID)) {
     map.addLayer({
-      id: RESULTS_LAYER_ID,
+      id: AREA_SEARCH_LAYER_ID,
       type: "circle",
-      source: RESULTS_CLUSTER_SOURCE_ID,
-      filter: ["!", ["has", "point_count"]],
+      source: AREA_SEARCH_SOURCE_ID,
       paint: {
-        "circle-radius": 6,
-        "circle-color": "#4da3ff",
-        "circle-stroke-color": "#081018",
+        "circle-radius": 7,
+        "circle-color": "#f97316",
+        "circle-stroke-color": "#fff7ed",
         "circle-stroke-width": 2,
       },
     });
@@ -414,12 +517,13 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       },
     });
   }
-
 }
 
 export default function OperationalMap({
   results,
   weatherFeatures,
+  areaSearchResults,
+  selectedSectionIntel,
   bounds,
   selectedId,
   onSelect,
@@ -435,7 +539,6 @@ export default function OperationalMap({
   onSelectAoi,
   zoomToSelectedAoiToken = 0,
 }: OperationalMapProps) {
-  const [showClusters, setShowClusters] = useState(true);
   const [modalAsset, setModalAsset] = useState<Asset | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -444,19 +547,30 @@ export default function OperationalMap({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const drawRef = useRef<TerraDraw | null>(null);
   const resultsRef = useRef<Asset[]>(results);
+  const areaSearchResultsRef = useRef<Asset[]>(areaSearchResults);
   const selectedIdRef = useRef<string | null>(selectedId);
   const drawModeRef = useRef<AoiDrawMode>(drawMode);
   const selectedAoiRef = useRef<AoiSelection | null>(selectedAoi);
-  const weatherGeoJsonRef = useRef<
-    GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>
-  >(emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>);
+  const weatherGeoJsonRef = useRef<GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>>(
+    emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>,
+  );
   const aoiGeoJsonRef = useRef<
     GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>
   >(emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>);
+  const areaSearchGeoJsonRef = useRef<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(
+    emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>,
+  );
+  const intelGeoJsonRef = useRef<GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>>(
+    emptyFeatureCollection() as GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>,
+  );
 
   useEffect(() => {
     resultsRef.current = results;
   }, [results]);
+
+  useEffect(() => {
+    areaSearchResultsRef.current = areaSearchResults;
+  }, [areaSearchResults]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -472,21 +586,16 @@ export default function OperationalMap({
 
   const filteredResults = useMemo(() => {
     let filtered = results;
-
     if (filterOperator) {
       filtered = filtered.filter((result) => result.operator === filterOperator);
     }
-
     if (filterType) {
       filtered = filtered.filter((result) => result.type === filterType);
     }
-
     return filtered;
   }, [results, filterOperator, filterType]);
 
-  const resultsGeoJson = useMemo<
-    GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>
-  >(
+  const resultsGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(
     () => ({
       type: "FeatureCollection",
       features: filteredResults
@@ -510,15 +619,10 @@ export default function OperationalMap({
     [filteredResults],
   );
 
-  const selectedResultGeoJson = useMemo<
-    GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>
-  >(() => {
+  const selectedResultGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(() => {
     const selectedAsset = filteredResults.find((asset) => asset.id === selectedId);
     if (!selectedAsset || !isValidCoordinate(selectedAsset.lat, selectedAsset.lon)) {
-      return emptyFeatureCollection() as GeoJSON.FeatureCollection<
-        GeoJSON.Point,
-        ResultFeatureProperties
-      >;
+      return emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>;
     }
 
     return {
@@ -543,9 +647,31 @@ export default function OperationalMap({
     };
   }, [filteredResults, selectedId]);
 
-  const weatherGeoJson = useMemo<
-    GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>
-  >(
+  const areaSearchGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(
+    () => ({
+      type: "FeatureCollection",
+      features: areaSearchResults
+        .filter((asset) => isValidCoordinate(asset.lat, asset.lon))
+        .map((asset) => ({
+          type: "Feature",
+          id: asset.id,
+          geometry: {
+            type: "Point",
+            coordinates: [asset.lon, asset.lat],
+          },
+          properties: {
+            id: asset.id,
+            name: asset.name,
+            type: asset.type,
+            operator: asset.operator,
+            popupHtml: createResultPopupHtml(asset),
+          },
+        })),
+    }),
+    [areaSearchResults],
+  );
+
+  const weatherGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>>(
     () => ({
       type: "FeatureCollection",
       features: weatherFeatures
@@ -575,9 +701,42 @@ export default function OperationalMap({
     [weatherFeatures],
   );
 
-  useEffect(() => {
-    weatherGeoJsonRef.current = weatherGeoJson;
-  }, [weatherGeoJson]);
+  const intelGeoJson = useMemo<GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>>(() => {
+    if (!selectedSectionIntel) {
+      return emptyFeatureCollection() as GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>;
+    }
+
+    return {
+      type: "FeatureCollection",
+      features: selectedSectionIntel.features
+        .filter((feature): feature is GeoJSON.Feature<IntelGeometry, SectionIntelFeatureProperties> => {
+          if (!feature.geometry) {
+            return false;
+          }
+
+          return (
+            feature.geometry.type === "Point" ||
+            feature.geometry.type === "LineString" ||
+            feature.geometry.type === "Polygon" ||
+            feature.geometry.type === "MultiPolygon" ||
+            feature.geometry.type === "MultiLineString"
+          );
+        })
+        .map((feature, index) => {
+          const properties = feature.properties ?? {};
+          return {
+            type: "Feature" as const,
+            id: feature.id ?? `intel-${index}`,
+            geometry: feature.geometry,
+            properties: {
+              id: String(feature.id ?? `intel-${index}`),
+              ...properties,
+              popupHtml: createIntelPopupHtml(properties),
+            },
+          };
+        }),
+    };
+  }, [selectedSectionIntel]);
 
   const aoiGeoJson = useMemo<
     GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>
@@ -600,16 +759,28 @@ export default function OperationalMap({
   );
 
   useEffect(() => {
+    weatherGeoJsonRef.current = weatherGeoJson;
+  }, [weatherGeoJson]);
+
+  useEffect(() => {
     aoiGeoJsonRef.current = aoiGeoJson;
   }, [aoiGeoJson]);
+
+  useEffect(() => {
+    areaSearchGeoJsonRef.current = areaSearchGeoJson;
+  }, [areaSearchGeoJson]);
+
+  useEffect(() => {
+    intelGeoJsonRef.current = intelGeoJson;
+  }, [intelGeoJson]);
 
   const closePopup = useCallback(() => {
     popupRef.current?.remove();
     popupRef.current = null;
   }, []);
 
-  const openResultPopup = useCallback(
-    (feature: GeoJSON.Feature<GeoJSON.Point, ResultFeatureProperties>) => {
+  const openPopupHtml = useCallback(
+    (coordinates: [number, number], html: string, className = "sightline-popup") => {
       const map = mapRef.current;
       if (!map) {
         return;
@@ -620,33 +791,11 @@ export default function OperationalMap({
         closeButton: true,
         closeOnMove: false,
         closeOnClick: false,
-        className: "sightline-popup",
-        maxWidth: "320px",
-      })
-        .setLngLat(feature.geometry.coordinates as [number, number])
-        .setHTML(feature.properties.popupHtml)
-        .addTo(map);
-    },
-    [closePopup],
-  );
-
-  const openWeatherPopup = useCallback(
-    (feature: GeoJSON.Feature<GeoJSON.Point, WeatherFeatureProperties>) => {
-      const map = mapRef.current;
-      if (!map) {
-        return;
-      }
-
-      closePopup();
-      popupRef.current = new maplibregl.Popup({
-        closeButton: true,
-        closeOnMove: false,
-        closeOnClick: false,
-        className: "sightline-popup sightline-popup-weather",
+        className,
         maxWidth: "360px",
       })
-        .setLngLat(feature.geometry.coordinates as [number, number])
-        .setHTML(feature.properties.popupHtml)
+        .setLngLat(coordinates)
+        .setHTML(html)
         .addTo(map);
     },
     [closePopup],
@@ -670,10 +819,12 @@ export default function OperationalMap({
     const syncSources = () => {
       ensureSourcesAndLayers(map);
       asGeoJSONSource(map, RESULTS_SOURCE_ID)?.setData(resultsGeoJson);
-      asGeoJSONSource(map, RESULTS_CLUSTER_SOURCE_ID)?.setData(resultsGeoJson);
       asGeoJSONSource(map, WEATHER_SOURCE_ID)?.setData(weatherGeoJsonRef.current);
       asGeoJSONSource(map, AOI_SOURCE_ID)?.setData(aoiGeoJsonRef.current);
+      asGeoJSONSource(map, AREA_SEARCH_SOURCE_ID)?.setData(areaSearchGeoJsonRef.current);
+      asGeoJSONSource(map, INTEL_SOURCE_ID)?.setData(intelGeoJsonRef.current);
       map.setFilter(RESULTS_SELECTED_LAYER_ID, ["==", ["get", "id"], selectedIdRef.current ?? ""]);
+      map.resize();
     };
 
     const setupDraw = () => {
@@ -727,18 +878,21 @@ export default function OperationalMap({
       setupDraw();
     };
 
-    const handleClick = async (event: maplibregl.MapMouseEvent) => {
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
       if (drawModeRef.current !== "select") {
         return;
       }
 
       const hitFeatures = map.queryRenderedFeatures(event.point, {
         layers: [
-          RESULTS_CLUSTER_LAYER_ID,
           RESULTS_LAYER_ID,
-          RESULTS_PLAIN_LAYER_ID,
+          AREA_SEARCH_LAYER_ID,
           WEATHER_CIRCLE_LAYER_ID,
           WEATHER_ICON_LAYER_ID,
+          INTEL_POINT_LAYER_ID,
+          INTEL_LINE_LAYER_ID,
+          INTEL_FILL_LAYER_ID,
+          INTEL_FILL_OUTLINE_LAYER_ID,
           AOI_FILL_LAYER_ID,
           AOI_OUTLINE_LAYER_ID,
           AOI_SELECTED_OUTLINE_LAYER_ID,
@@ -750,27 +904,44 @@ export default function OperationalMap({
         return;
       }
 
-      if (topFeature.layer.id === RESULTS_CLUSTER_LAYER_ID) {
-        const clusterId = topFeature.properties?.cluster_id;
-        const clusterSource = asGeoJSONSource(map, RESULTS_CLUSTER_SOURCE_ID);
-        if (typeof clusterId === "number" && clusterSource) {
-          const expansionZoom = await clusterSource.getClusterExpansionZoom(clusterId);
-          map.easeTo({
-            center: (topFeature.geometry as GeoJSON.Point).coordinates as [number, number],
-            zoom: expansionZoom,
-            duration: 500,
-          });
-        }
-        return;
-      }
-
       if (
         topFeature.layer.id === WEATHER_CIRCLE_LAYER_ID ||
         topFeature.layer.id === WEATHER_ICON_LAYER_ID
       ) {
         const match = weatherGeoJsonRef.current.features.find((feature) => feature.id === topFeature.id);
         if (match) {
-          openWeatherPopup(match);
+          openPopupHtml(
+            match.geometry.coordinates as [number, number],
+            match.properties.popupHtml,
+            "sightline-popup sightline-popup-weather",
+          );
+        }
+        return;
+      }
+
+      if (
+        topFeature.layer.id === INTEL_POINT_LAYER_ID ||
+        topFeature.layer.id === INTEL_LINE_LAYER_ID ||
+        topFeature.layer.id === INTEL_FILL_LAYER_ID ||
+        topFeature.layer.id === INTEL_FILL_OUTLINE_LAYER_ID
+      ) {
+        const match = intelGeoJsonRef.current.features.find((feature) => feature.id === topFeature.id);
+        if (match) {
+          if (match.geometry.type === "Point") {
+            openPopupHtml(match.geometry.coordinates as [number, number], match.properties.popupHtml);
+          } else {
+            const bbox = new maplibregl.LngLatBounds();
+            const coords =
+              match.geometry.type === "LineString"
+                ? match.geometry.coordinates
+                : match.geometry.type === "MultiLineString"
+                  ? match.geometry.coordinates.flat()
+                  : match.geometry.type === "Polygon"
+                    ? match.geometry.coordinates.flat()
+                    : match.geometry.coordinates.flat(2);
+            coords.forEach((coordinate) => bbox.extend(coordinate as [number, number]));
+            openPopupHtml(bbox.getCenter().toArray() as [number, number], match.properties.popupHtml);
+          }
         }
         return;
       }
@@ -800,20 +971,33 @@ export default function OperationalMap({
             ? topFeature.id
             : null;
 
-      if (assetId) {
-        onSelect(assetId);
+      if (!assetId) {
+        return;
       }
+
+      if (topFeature.layer.id === AREA_SEARCH_LAYER_ID) {
+        const asset = areaSearchResultsRef.current.find((item) => item.id === assetId);
+        if (asset) {
+          openPopupHtml([asset.lon, asset.lat], createResultPopupHtml(asset));
+        }
+        return;
+      }
+
+      onSelect(assetId);
     };
 
     const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
       const isInteractive =
         map.queryRenderedFeatures(event.point, {
           layers: [
-            RESULTS_CLUSTER_LAYER_ID,
             RESULTS_LAYER_ID,
-            RESULTS_PLAIN_LAYER_ID,
+            AREA_SEARCH_LAYER_ID,
             WEATHER_CIRCLE_LAYER_ID,
             WEATHER_ICON_LAYER_ID,
+            INTEL_POINT_LAYER_ID,
+            INTEL_LINE_LAYER_ID,
+            INTEL_FILL_LAYER_ID,
+            INTEL_FILL_OUTLINE_LAYER_ID,
             AOI_FILL_LAYER_ID,
             AOI_OUTLINE_LAYER_ID,
             AOI_SELECTED_OUTLINE_LAYER_ID,
@@ -835,7 +1019,9 @@ export default function OperationalMap({
         return;
       }
 
-      const asset = resultsRef.current.find((item) => item.id === assetId);
+      const asset =
+        resultsRef.current.find((item) => item.id === assetId) ??
+        areaSearchResultsRef.current.find((item) => item.id === assetId);
       if (asset) {
         setModalAsset(asset);
         setIsModalOpen(true);
@@ -847,7 +1033,6 @@ export default function OperationalMap({
     map.on("click", handleClick);
     map.on("mousemove", handleMouseMove);
     document.addEventListener("click", handlePopupButtonClick);
-
     mapRef.current = map;
 
     return () => {
@@ -862,7 +1047,16 @@ export default function OperationalMap({
       map.remove();
       mapRef.current = null;
     };
-  }, [activeBasemap, closePopup, onAddAoiFromGeometry, onReplaceAoiGeometry, onSelect, onSelectAoi, openResultPopup, openWeatherPopup, resultsGeoJson]);
+  }, [
+    activeBasemap,
+    closePopup,
+    onAddAoiFromGeometry,
+    onReplaceAoiGeometry,
+    onSelect,
+    onSelectAoi,
+    openPopupHtml,
+    resultsGeoJson,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -872,16 +1066,17 @@ export default function OperationalMap({
 
     ensureSourcesAndLayers(map);
     asGeoJSONSource(map, RESULTS_SOURCE_ID)?.setData(resultsGeoJson);
-    asGeoJSONSource(map, RESULTS_CLUSTER_SOURCE_ID)?.setData(resultsGeoJson);
-    map.setLayoutProperty(RESULTS_CLUSTER_LAYER_ID, "visibility", showClusters ? "visible" : "none");
-    map.setLayoutProperty(
-      RESULTS_CLUSTER_COUNT_LAYER_ID,
-      "visibility",
-      showClusters ? "visible" : "none",
-    );
-    map.setLayoutProperty(RESULTS_LAYER_ID, "visibility", showClusters ? "visible" : "none");
-    map.setLayoutProperty(RESULTS_PLAIN_LAYER_ID, "visibility", showClusters ? "none" : "visible");
-  }, [resultsGeoJson, showClusters]);
+  }, [resultsGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) {
+      return;
+    }
+
+    ensureSourcesAndLayers(map);
+    asGeoJSONSource(map, AREA_SEARCH_SOURCE_ID)?.setData(areaSearchGeoJson);
+  }, [areaSearchGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -900,6 +1095,16 @@ export default function OperationalMap({
     }
 
     ensureSourcesAndLayers(map);
+    asGeoJSONSource(map, INTEL_SOURCE_ID)?.setData(intelGeoJson);
+  }, [intelGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) {
+      return;
+    }
+
+    ensureSourcesAndLayers(map);
     asGeoJSONSource(map, AOI_SOURCE_ID)?.setData(aoiGeoJson);
   }, [aoiGeoJson]);
 
@@ -909,9 +1114,7 @@ export default function OperationalMap({
       return;
     }
 
-    ensureSourcesAndLayers(map);
     map.setFilter(RESULTS_SELECTED_LAYER_ID, ["==", ["get", "id"], selectedId ?? ""]);
-
     if (!selectedId) {
       return;
     }
@@ -931,10 +1134,13 @@ export default function OperationalMap({
 
     window.setTimeout(() => {
       if (selectedIdRef.current === selectedId) {
-        openResultPopup(selectedFeature);
+        openPopupHtml(
+          selectedFeature.geometry.coordinates as [number, number],
+          selectedFeature.properties.popupHtml,
+        );
       }
     }, 180);
-  }, [selectedId, selectedResultGeoJson, openResultPopup, closePopup]);
+  }, [selectedId, selectedResultGeoJson, openPopupHtml, closePopup]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -985,7 +1191,6 @@ export default function OperationalMap({
 
     if (drawMode === "edit") {
       draw.clear();
-
       if (!selectedAoi) {
         draw.setMode("select");
         return;
@@ -1048,7 +1253,7 @@ export default function OperationalMap({
 
   return (
     <>
-      <div className="relative h-full min-h-[620px] overflow-hidden rounded-[28px] border border-slate-300 bg-white shadow-[0_25px_60px_rgba(15,23,42,0.14)]">
+      <div className="relative h-[clamp(480px,70vh,880px)] min-h-[480px] overflow-hidden rounded-[28px] border border-slate-300 bg-white shadow-[0_25px_60px_rgba(15,23,42,0.14)] sm:min-h-[560px] xl:h-[72vh]">
         <div
           ref={containerRef}
           className="h-full w-full bg-[radial-gradient(circle_at_top,_rgba(148,163,184,0.16),_transparent_55%),linear-gradient(180deg,_rgba(248,250,252,0.85),_rgba(255,255,255,1))]"
@@ -1057,14 +1262,9 @@ export default function OperationalMap({
           <div className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
             Operational map canvas
           </div>
-          <label className="pointer-events-auto flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
-            <input
-              type="checkbox"
-              checked={showClusters}
-              onChange={(event) => setShowClusters(event.target.checked)}
-            />
-            Cluster points
-          </label>
+          <div className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm backdrop-blur">
+            {areaSearchResults.length} area search result{areaSearchResults.length === 1 ? "" : "s"} · {intelGeoJson.features.length} intel overlay{intelGeoJson.features.length === 1 ? "" : "s"}
+          </div>
         </div>
         {weatherFeatures.length > 0 && (
           <div className="pointer-events-none absolute bottom-6 left-6 rounded-full border border-sky-200 bg-white/90 px-3 py-1 text-xs font-medium text-sky-700 shadow-sm backdrop-blur">

@@ -6,8 +6,6 @@ import type { AoiDataFilter, AoiSelection } from "@/lib/aoi/types";
 
 interface AoiPanelProps {
   selectedAoi: AoiSelection | null;
-  loading: boolean;
-  fetchMessage: string | null;
   onUpdateAoi: (id: string, patch: Partial<AoiSelection>) => void;
   onAddComment: (id: string, text: string) => void;
   onToggleFilter: (id: string, filter: AoiDataFilter) => void;
@@ -17,8 +15,6 @@ interface AoiPanelProps {
 
 export default function AoiPanel({
   selectedAoi,
-  loading,
-  fetchMessage,
   onUpdateAoi,
   onAddComment,
   onToggleFilter,
@@ -114,10 +110,10 @@ export default function AoiPanel({
           <button
             type="button"
             onClick={onFetchSelectedData}
-            disabled={loading}
+            disabled={selectedAoi.intel.status === "loading"}
             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {loading ? "Fetching…" : "Fetch selected data"}
+            {selectedAoi.intel.status === "loading" ? "Fetching…" : "Fetch Intelligence"}
           </button>
           <button
             type="button"
@@ -127,12 +123,34 @@ export default function AoiPanel({
             Delete AOI
           </button>
         </div>
-        {fetchMessage && (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            {fetchMessage}
+        {selectedAoi.intel.status === "error" && selectedAoi.intel.error ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            {selectedAoi.intel.error}
           </div>
-        )}
+        ) : null}
       </section>
+
+      {selectedAoi.intel.status === "success" && (
+        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Fetched Intelligence</h3>
+            <p className="text-xs text-slate-500">
+              {selectedAoi.intel.featureCollection?.features.length ?? 0} overlay feature
+              {(selectedAoi.intel.featureCollection?.features.length ?? 0) === 1 ? "" : "s"} available for this section.
+            </p>
+          </div>
+          {selectedAoi.intel.fetchedAt ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              Fetched {new Date(selectedAoi.intel.fetchedAt).toLocaleString()}
+            </div>
+          ) : null}
+          {!(selectedAoi.intel.featureCollection?.features.length) ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              No data returned for selected sources.
+            </div>
+          ) : null}
+        </section>
+      )}
     </div>
   );
 }

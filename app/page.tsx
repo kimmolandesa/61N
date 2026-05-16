@@ -8,6 +8,7 @@ import LeftPanel from "@/components/layout/LeftPanel";
 import RightInspector from "@/components/layout/RightInspector";
 import TopToolbar from "@/components/layout/TopToolbar";
 import { useAoiManager } from "@/hooks/useAoiManager";
+import { fetchSectionIntel } from "@/lib/intel/client";
 import type { GeoResult, SearchError, SearchResult } from "@/lib/types";
 import type { IntelFeature } from "@/lib/intel/types";
 import { BASE_MAPS, BASE_MAPS_BY_ID, type BaseMapId } from "@/lib/map/baseMaps";
@@ -62,8 +63,9 @@ function HomeContent() {
     clearAllAois,
     addComment,
     toggleFilter,
-    intelStateByAoiId,
-    setAoiIntelState,
+    setSectionIntelLoading,
+    setSectionIntelSuccess,
+    setSectionIntelError,
     saveToStorage,
     loadFromStorage,
     setActiveDrawMode,
@@ -83,6 +85,10 @@ function HomeContent() {
   const [riskOverlayEnabled, setRiskOverlayEnabled] = useState(false);
   const [toolbarMessage, setToolbarMessage] = useState<string | null>(null);
   const [zoomToSelectedAoiToken, setZoomToSelectedAoiToken] = useState(0);
+  const [areaSearchQueryByAoiId, setAreaSearchQueryByAoiId] = useState<Record<string, string>>({});
+  const [areaSearchResultByAoiId, setAreaSearchResultByAoiId] = useState<Record<string, SearchResult>>({});
+  const [areaSearchMessageByAoiId, setAreaSearchMessageByAoiId] = useState<Record<string, string | null>>({});
+  const [areaSearchLoadingAoiId, setAreaSearchLoadingAoiId] = useState<string | null>(null);
 
   const isInitialMount = useRef(true);
   const lastUrlQuery = useRef<string | null>(null);
@@ -174,49 +180,83 @@ function HomeContent() {
       return;
     }
 
-    setAoiIntelState(selectedAoi.id, {
-      status: "loading",
-      message: "Fetching selected data...",
-    });
+    setSectionIntelLoading(selectedAoi.id);
 
     try {
-      const response = await fetch("/api/intel", {
+      const featureCollection = await fetchSectionIntel(selectedAoi);
+      setSectionIntelSuccess(selectedAoi.id, featureCollection);
+    } catch (fetchError) {
+      setSectionIntelError(
+        selectedAoi.id,
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Unable to fetch selected data.",
+      );
+    }
+  }, [selectedAoi, setSectionIntelError, setSectionIntelLoading, setSectionIntelSuccess]);
+
+  const handleRunAreaSearch = useCallback(async () => {
+    if (!selectedAoi) {
+      setToolbarMessage("Select a section before running an area search.");
+      return;
+    }
+
+    const query = (areaSearchQueryByAoiId[selectedAoi.id] ?? "").trim();
+    if (!query) {
+      setAreaSearchMessageByAoiId((current) => ({
+        ...current,
+        [selectedAoi.id]: "Enter a query for this section.",
+      }));
+      return;
+    }
+
+    setAreaSearchLoadingAoiId(selectedAoi.id);
+    setAreaSearchMessageByAoiId((current) => ({
+      ...current,
+      [selectedAoi.id]: null,
+    }));
+
+    try {
+      const response = await fetch("/api/aoi/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           aoiId: selectedAoi.id,
-          geometry: selectedAoi.geometry,
+          query,
           bbox: [
             selectedAoi.bounds.west,
             selectedAoi.bounds.south,
             selectedAoi.bounds.east,
             selectedAoi.bounds.north,
           ],
-          filters: selectedAoi.selectedFilters,
+          geometry: selectedAoi.geometry,
         }),
       });
 
-      const data = (await response.json()) as { message?: string; error?: string };
+      const data = (await response.json()) as SearchResult | SearchError;
       if (!response.ok) {
-        throw new Error(data.error || "Unable to fetch selected data.");
+        throw new Error("error" in data ? data.error : "Unable to search this section.");
       }
 
-      setAoiIntelState(selectedAoi.id, {
-        status: "success",
-        message: data.message ?? "Selected data request sent.",
-        result: data,
-        lastFetchedAt: new Date().toISOString(),
-      });
-    } catch (fetchError) {
-      setAoiIntelState(selectedAoi.id, {
-        status: "error",
-        message:
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Unable to fetch selected data.",
-      });
+      const result = data as SearchResult;
+      setAreaSearchResultByAoiId((current) => ({
+        ...current,
+        [selectedAoi.id]: result,
+      }));
+      setAreaSearchMessageByAoiId((current) => ({
+        ...current,
+        [selectedAoi.id]: `${result.results.length} result${result.results.length === 1 ? "" : "s"} found in this section.`,
+      }));
+    } catch (searchError) {
+      setAreaSearchMessageByAoiId((current) => ({
+        ...current,
+        [selectedAoi.id]:
+          searchError instanceof Error ? searchError.message : "Unable to search this section.",
+      }));
+    } finally {
+      setAreaSearchLoadingAoiId(null);
     }
-  }, [selectedAoi, setAoiIntelState]);
+  }, [areaSearchQueryByAoiId, selectedAoi]);
 
   const handleNewWorkspace = useCallback(() => {
     if (window.confirm("Clear all current AOIs from this workspace?")) {
@@ -321,6 +361,22 @@ function HomeContent() {
       <span>
         AOIs: <span className="font-medium text-slate-900">{aois.length}</span>
       </span>
+      {selectedAoi ? (
+        <span>
+          Section search:{" "}
+          <span className="font-medium text-slate-900">
+            {areaSearchResultByAoiId[selectedAoi.id]?.results.length ?? 0}
+          </span>
+        </span>
+      ) : null}
+      {selectedAoi ? (
+        <span>
+          Intelligence:{" "}
+          <span className="font-medium text-slate-900">
+            {selectedAoi.intel.featureCollection?.features.length ?? 0}
+          </span>
+        </span>
+      ) : null}
       <span>
         Basemap: <span className="font-medium text-slate-900">{BASE_MAPS_BY_ID[activeBasemap].label}</span>
       </span>
@@ -382,12 +438,31 @@ function HomeContent() {
           selectedAoi={selectedAoi}
           onSelectAoi={(id) => selectAoi(id)}
           onToggleFilter={toggleFilter}
+          onFetchIntelligence={handleFetchSelectedData}
+          intelState={selectedAoi?.intel ?? null}
+          areaSearchQuery={selectedAoi ? areaSearchQueryByAoiId[selectedAoi.id] ?? "" : ""}
+          areaSearchLoading={selectedAoi ? areaSearchLoadingAoiId === selectedAoi.id : false}
+          areaSearchMessage={selectedAoi ? areaSearchMessageByAoiId[selectedAoi.id] ?? null : null}
+          areaSearchCount={selectedAoi ? areaSearchResultByAoiId[selectedAoi.id]?.results.length ?? 0 : 0}
+          onAreaSearchQueryChange={(value) => {
+            if (!selectedAoi) {
+              return;
+            }
+
+            setAreaSearchQueryByAoiId((current) => ({
+              ...current,
+              [selectedAoi.id]: value,
+            }));
+          }}
+          onRunAreaSearch={handleRunAreaSearch}
         />
       }
       mapCanvas={
         <OperationalMap
           results={searchResult?.results ?? []}
           weatherFeatures={weatherFeatures}
+          areaSearchResults={selectedAoi ? areaSearchResultByAoiId[selectedAoi.id]?.results ?? [] : []}
+          selectedSectionIntel={selectedAoi?.intel.featureCollection ?? null}
           bounds={searchResult?.bounds ?? weatherBounds ?? null}
           selectedId={selectedId}
           onSelect={setSelectedId}
@@ -407,8 +482,6 @@ function HomeContent() {
       rightInspector={
         <RightInspector
           selectedAoi={selectedAoi}
-          loading={selectedAoi ? intelStateByAoiId[selectedAoi.id]?.status === "loading" : false}
-          fetchMessage={selectedAoi ? intelStateByAoiId[selectedAoi.id]?.message ?? null : null}
           onUpdateAoi={updateAoi}
           onAddComment={addComment}
           onToggleFilter={toggleFilter}

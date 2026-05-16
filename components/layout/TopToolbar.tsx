@@ -93,11 +93,6 @@ export default function TopToolbar(props: TopToolbarProps) {
           <ToolbarButton label="Save" onClick={props.onSave} />
           <ToolbarButton label="Export" onClick={props.onExport} />
         </ToolbarGroup>
-        <ToolbarGroup title="Edit">
-          <ToolbarButton label="Undo" onClick={props.onUndo} />
-          <ToolbarButton label="Redo" onClick={props.onRedo} />
-          <ToolbarButton label="Clear selection" onClick={props.onClearSelection} />
-        </ToolbarGroup>
         <ToolbarGroup title="Map">
           <AoiToolbar
             activeDrawMode={props.activeDrawMode}
@@ -121,17 +116,6 @@ export default function TopToolbar(props: TopToolbarProps) {
               </button>
             ))}
           </div>
-        </ToolbarGroup>
-        <ToolbarGroup title="Data">
-          <ToolbarButton label="Fetch intelligence" onClick={props.onFetchIntelligence} />
-          <ToolbarButton label="Refresh data" onClick={props.onRefreshData} />
-          <ToolbarButton label="Generate summary" onClick={props.onGenerateSummary} />
-        </ToolbarGroup>
-        <ToolbarGroup title="View">
-          <ToolbarButton label="Zoom to AOI" onClick={props.onZoomToAoi} />
-          <ToolbarButton label="Toggle satellite" onClick={props.onToggleSatellite} />
-          <ToolbarButton label="Toggle terrain" onClick={props.onToggleTerrain} />
-          <ToolbarButton label="Toggle risk overlays" onClick={props.onToggleRiskOverlays} />
         </ToolbarGroup>
       </div>
     </header>

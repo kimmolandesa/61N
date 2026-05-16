@@ -27,11 +27,24 @@ export type AoiDataFilter =
   | "water"
   | "logistics";
 
+export interface SectionIntelFeatureProperties {
+  sectionId?: string;
+  category?: string;
+  source?: string;
+  name?: string;
+  confidence?: number;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+export type SectionIntelFeatureCollection =
+  GeoJSON.FeatureCollection<GeoJSON.Geometry, SectionIntelFeatureProperties>;
+
 export interface AoiIntelState {
   status: "idle" | "loading" | "success" | "error";
-  message: string | null;
-  result?: unknown;
-  lastFetchedAt?: string;
+  error?: string;
+  fetchedAt?: string;
+  featureCollection?: SectionIntelFeatureCollection;
 }
 
 export interface AoiComment {
@@ -60,6 +73,24 @@ export interface AoiSelection {
     lat: number;
   };
   areaSqKm?: number;
+  selectedFilters: AoiDataFilter[];
+  intel: AoiIntelState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersistedAoiSelection {
+  id: string;
+  name: string;
+  notes: string;
+  comments: AoiComment[];
+  shapeType: AoiShapeType;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  bounds: AoiBounds;
+  center: {
+    lon: number;
+    lat: number;
+  };
   selectedFilters: AoiDataFilter[];
   createdAt: string;
   updatedAt: string;

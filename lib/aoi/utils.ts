@@ -2,6 +2,7 @@ import type {
   AoiBounds,
   AoiComment,
   AoiDataFilter,
+  AoiIntelState,
   AoiSelection,
   AoiShapeType,
 } from "@/lib/aoi/types";
@@ -221,6 +222,7 @@ export function createAoiSelection(input: {
   shapeType: AoiShapeType;
   geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   selectedFilters?: AoiDataFilter[];
+  intel?: AoiIntelState;
   createdAt?: string;
   updatedAt?: string;
 }): AoiSelection {
@@ -248,6 +250,9 @@ export function createAoiSelection(input: {
     center: getPolygonCenter(normalizedGeometry),
     areaSqKm: approximatePolygonAreaSqKm(normalizedGeometry),
     selectedFilters: input.selectedFilters ?? [...DEFAULT_AOI_FILTERS],
+    intel: input.intel ?? {
+      status: "idle",
+    },
     createdAt,
     updatedAt: timestamp,
   };

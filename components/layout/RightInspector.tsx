@@ -5,8 +5,6 @@ import type { AoiDataFilter, AoiSelection } from "@/lib/aoi/types";
 
 interface RightInspectorProps {
   selectedAoi: AoiSelection | null;
-  loading: boolean;
-  fetchMessage: string | null;
   onUpdateAoi: (id: string, patch: Partial<AoiSelection>) => void;
   onAddComment: (id: string, text: string) => void;
   onToggleFilter: (id: string, filter: AoiDataFilter) => void;

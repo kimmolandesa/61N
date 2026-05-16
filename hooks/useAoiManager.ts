@@ -11,9 +11,9 @@ import type {
   AoiComment,
   AoiDataFilter,
   AoiDrawMode,
-  AoiIntelState,
   AoiSelection,
   AoiShapeType,
+  SectionIntelFeatureCollection,
 } from "@/lib/aoi/types";
 
 export function useAoiManager() {
@@ -23,15 +23,29 @@ export function useAoiManager() {
     return stored[0]?.id ?? null;
   });
   const [activeDrawMode, setActiveDrawMode] = useState<AoiDrawMode>("select");
-  const [intelStateByAoiId, setIntelStateByAoiId] = useState<Record<string, AoiIntelState>>({});
   const storageReadyRef = useRef(true);
+  const persistTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!storageReadyRef.current) {
       return;
     }
 
-    writeStoredAoiSelections(aois);
+    if (persistTimeoutRef.current !== null) {
+      window.clearTimeout(persistTimeoutRef.current);
+    }
+
+    persistTimeoutRef.current = window.setTimeout(() => {
+      writeStoredAoiSelections(aois);
+      persistTimeoutRef.current = null;
+    }, 250);
+
+    return () => {
+      if (persistTimeoutRef.current !== null) {
+        window.clearTimeout(persistTimeoutRef.current);
+        persistTimeoutRef.current = null;
+      }
+    };
   }, [aois]);
 
   const selectedAoi = useMemo(
@@ -102,6 +116,7 @@ export function useAoiManager() {
           geometry,
           shapeType: aoi.shapeType,
           selectedFilters: aoi.selectedFilters,
+          intel: aoi.intel,
           createdAt: aoi.createdAt,
         });
 
@@ -118,28 +133,17 @@ export function useAoiManager() {
       );
       return next;
     });
-    setIntelStateByAoiId((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
   }, []);
 
   const clearAllAois = useCallback(() => {
     setAois([]);
     setSelectedAoiId(null);
     setActiveDrawMode("select");
-    setIntelStateByAoiId({});
   }, []);
 
   const replaceAois = useCallback((nextAois: AoiSelection[]) => {
     setAois(nextAois);
     setSelectedAoiId(nextAois[0]?.id ?? null);
-    setIntelStateByAoiId((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([aoiId]) => nextAois.some((aoi) => aoi.id === aoiId)),
-      ),
-    );
   }, []);
 
   const saveToStorage = useCallback(() => {
@@ -198,19 +202,72 @@ export function useAoiManager() {
     );
   }, []);
 
-  const setAoiIntelState = useCallback((id: string, state: AoiIntelState) => {
-    setIntelStateByAoiId((current) => ({
-      ...current,
-      [id]: state,
-    }));
+  const setSectionIntelLoading = useCallback((id: string) => {
+    setAois((current) =>
+      current.map((aoi) =>
+        aoi.id === id
+          ? {
+              ...aoi,
+              intel: {
+                status: "loading",
+              },
+              updatedAt: new Date().toISOString(),
+            }
+          : aoi,
+      ),
+    );
   }, []);
 
-  const clearAoiIntelState = useCallback((id: string) => {
-    setIntelStateByAoiId((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
+  const setSectionIntelSuccess = useCallback((id: string, featureCollection: SectionIntelFeatureCollection) => {
+    setAois((current) =>
+      current.map((aoi) =>
+        aoi.id === id
+          ? {
+              ...aoi,
+              intel: {
+                status: "success",
+                fetchedAt: new Date().toISOString(),
+                featureCollection,
+              },
+              updatedAt: new Date().toISOString(),
+            }
+          : aoi,
+      ),
+    );
+  }, []);
+
+  const setSectionIntelError = useCallback((id: string, error: string) => {
+    setAois((current) =>
+      current.map((aoi) =>
+        aoi.id === id
+          ? {
+              ...aoi,
+              intel: {
+                status: "error",
+                error,
+                featureCollection: aoi.intel.featureCollection,
+              },
+              updatedAt: new Date().toISOString(),
+            }
+          : aoi,
+      ),
+    );
+  }, []);
+
+  const clearSectionIntel = useCallback((id: string) => {
+    setAois((current) =>
+      current.map((aoi) =>
+        aoi.id === id
+          ? {
+              ...aoi,
+              intel: {
+                status: "idle",
+              },
+              updatedAt: new Date().toISOString(),
+            }
+          : aoi,
+      ),
+    );
   }, []);
 
   return {
@@ -218,7 +275,6 @@ export function useAoiManager() {
     selectedAoiId,
     selectedAoi,
     activeDrawMode,
-    intelStateByAoiId,
     addAoiFromGeometry,
     updateAoi,
     replaceAoiGeometry,
@@ -229,8 +285,10 @@ export function useAoiManager() {
     replaceAois,
     addComment,
     toggleFilter,
-    setAoiIntelState,
-    clearAoiIntelState,
+    setSectionIntelLoading,
+    setSectionIntelSuccess,
+    setSectionIntelError,
+    clearSectionIntel,
     saveToStorage,
     loadFromStorage,
     setActiveDrawMode,

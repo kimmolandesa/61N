@@ -32,6 +32,8 @@ export default function MapView(props: MapViewProps) {
   return (
     <OperationalMap
       {...props}
+      areaSearchResults={[]}
+      selectedSectionIntel={null}
       aois={aois}
       selectedAoiId={selectedAoiId}
       selectedAoi={selectedAoi}

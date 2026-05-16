@@ -23,17 +23,21 @@ export default function AppShell({
         {topBar}
         {statusBanner ? <div className="border-b border-slate-200 bg-white px-4 py-2">{statusBanner}</div> : null}
       </div>
-      <div className="grid min-h-[calc(100vh-88px)] grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
-        {leftSidebar}
-        <main className="min-h-0 overflow-visible bg-[linear-gradient(180deg,#eef2f7,#e5ebf3)] p-4 sm:p-6">
-          <div className="mx-auto flex min-h-full w-full max-w-[1320px] flex-col">
+      <div className="grid min-h-[calc(100vh-88px)] grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)_360px] xl:items-start">
+        <div className="xl:sticky xl:top-[88px] xl:h-[calc(100vh-88px)] xl:overflow-y-auto">
+          {leftSidebar}
+        </div>
+        <main className="bg-[linear-gradient(180deg,#eef2f7,#e5ebf3)] p-4 sm:p-6">
+          <div className="mx-auto flex w-full max-w-[1320px] flex-col">
             <div className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
               Map Working Paper
             </div>
             <div className="flex-1">{mapCanvas}</div>
           </div>
         </main>
-        {rightInspector}
+        <div className="xl:sticky xl:top-[88px] xl:h-[calc(100vh-88px)] xl:overflow-y-auto">
+          {rightInspector}
+        </div>
       </div>
     </div>
   );

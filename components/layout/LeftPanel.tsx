@@ -1,6 +1,7 @@
 "use client";
 
-import type { AoiDataFilter, AoiSelection } from "@/lib/aoi/types";
+import { useMemo } from "react";
+import type { AoiDataFilter, AoiIntelState, AoiSelection } from "@/lib/aoi/types";
 
 const SHAPE_LABELS = {
   polygon: "Polygon",
@@ -30,6 +31,14 @@ interface LeftPanelProps {
   selectedAoi: AoiSelection | null;
   onSelectAoi: (id: string) => void;
   onToggleFilter: (id: string, filter: AoiDataFilter) => void;
+  onFetchIntelligence: () => void;
+  intelState: AoiIntelState | null;
+  areaSearchQuery: string;
+  areaSearchLoading: boolean;
+  areaSearchMessage: string | null;
+  areaSearchCount: number;
+  onAreaSearchQueryChange: (value: string) => void;
+  onRunAreaSearch: () => void;
 }
 
 export default function LeftPanel({
@@ -38,7 +47,32 @@ export default function LeftPanel({
   selectedAoi,
   onSelectAoi,
   onToggleFilter,
+  onFetchIntelligence,
+  intelState,
+  areaSearchQuery,
+  areaSearchLoading,
+  areaSearchMessage,
+  areaSearchCount,
+  onAreaSearchQueryChange,
+  onRunAreaSearch,
 }: LeftPanelProps) {
+  const intelCounts = useMemo(() => {
+    if (!intelState?.featureCollection) {
+      return [];
+    }
+
+    const counts = new Map<string, number>();
+    for (const feature of intelState.featureCollection.features) {
+      const category =
+        typeof feature.properties?.category === "string"
+          ? feature.properties.category
+          : "unknown";
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+
+    return Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right));
+  }, [intelState]);
+
   return (
     <aside className="flex min-h-0 flex-col border-b border-slate-200 bg-[#f8fafc] xl:h-full xl:border-b-0 xl:border-r">
       <div className="border-b border-slate-200 px-4 py-4">
@@ -93,7 +127,7 @@ export default function LeftPanel({
                 Select a section to configure data sources.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {FILTER_OPTIONS.map((filter) => (
                   <label
                     key={filter.value}
@@ -108,6 +142,82 @@ export default function LeftPanel({
                     <span>{filter.label}</span>
                   </label>
                 ))}
+                <button
+                  type="button"
+                  onClick={onFetchIntelligence}
+                  disabled={intelState?.status === "loading"}
+                  className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {intelState?.status === "loading" ? "Fetching…" : "Fetch Intelligence"}
+                </button>
+                {intelState?.status === "error" && intelState.error ? (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {intelState.error}
+                  </div>
+                ) : null}
+                {intelState?.status === "success" ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                    <div>
+                      {intelState.featureCollection?.features.length
+                        ? `${intelState.featureCollection.features.length} feature${intelState.featureCollection.features.length === 1 ? "" : "s"} loaded.`
+                        : "No data returned for selected sources"}
+                    </div>
+                    {intelState.fetchedAt ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Fetched {new Date(intelState.fetchedAt).toLocaleString()}
+                      </div>
+                    ) : null}
+                    {intelCounts.length > 0 ? (
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        {intelCounts.map(([category, count]) => (
+                          <div key={category} className="flex items-center justify-between text-xs">
+                            <span className="font-medium capitalize text-slate-600">{category}</span>
+                            <span className="text-slate-900">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Section Search
+          </div>
+          <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            {!selectedAoi ? (
+              <div className="text-sm text-slate-500">
+                Select a section to search inside it.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-xs text-slate-500">
+                  Search only inside this section. Current results: {areaSearchCount}
+                </div>
+                <input
+                  type="text"
+                  value={areaSearchQuery}
+                  onChange={(event) => onAreaSearchQueryChange(event.target.value)}
+                  placeholder='Example: "museums" or "bridges"'
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                />
+                <button
+                  type="button"
+                  onClick={onRunAreaSearch}
+                  disabled={areaSearchLoading}
+                  className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {areaSearchLoading ? "Searching…" : "Search section"}
+                </button>
+                {areaSearchMessage ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    {areaSearchMessage}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
