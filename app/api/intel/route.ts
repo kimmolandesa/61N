@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { circle as turfCircle } from "@turf/turf";
 import type { AoiDataFilter } from "@/lib/aoi/types";
 import type { SectionIntelResponse, SectionIntelSourceSummary } from "@/lib/aoi/sectionIntel";
 import type { IntelFeature, IntelGeometry } from "@/lib/intel/types";
@@ -272,6 +273,15 @@ async function fetchPopulation(
   };
 }
 
+// Conservative fallback radii (km) when the API doesn't provide a range value.
+const RADIO_FALLBACK_RADIUS_KM: Record<string, number> = {
+  NR:   1,
+  LTE:  2,
+  UMTS: 5,
+  GSM:  8,
+};
+const DEFAULT_RADIUS_KM = 3;
+
 async function fetchTelecom(
   bbox: [number, number, number, number],
 ): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary; notes: string[] }> {
@@ -282,34 +292,81 @@ async function fetchTelecom(
     dead_zone_ratio?: number;
   }>(`/api/intel/comms?bbox=${bboxToQuery(bbox)}`);
 
-  const towerFeatures = data.towers
-    ? normalizeFeatureCollection({
-        collection: data.towers,
-        source: "telecom",
-        category: "telecom",
-        idPrefix: "telecom-tower",
-        defaultName: "Cell tower",
-      })
-    : [];
+  // Build geo-accurate coverage circles from tower data using Turf.js.
+  // The backend's dot-grid is discarded — we derive coverage directly from
+  // each tower's coverage_radius_m + radio type, which gives correctly
+  // sized geographic polygons instead of a uniform sea of screen dots.
+  const coverageCircles: IntelFeature[] = (data.towers?.features ?? []).flatMap(
+    (feature, index) => {
+      if (feature.geometry?.type !== "Point") return [];
 
-  const coverageFeatures = data.coverage_grid
-    ? normalizeFeatureCollection({
-        collection: data.coverage_grid,
-        source: "telecom",
-        category: "telecom",
-        idPrefix: "telecom-grid",
-        defaultName: "Coverage cell",
-      })
-    : [];
+      const props = feature.properties ?? {};
+      const [lon, lat] = (feature.geometry as GeoJSON.Point).coordinates;
+      const radio = typeof props.radio === "string" ? props.radio : "LTE";
 
-  const features = [...towerFeatures, ...coverageFeatures];
+      const radiusKm =
+        typeof props.coverage_radius_m === "number" && props.coverage_radius_m > 10
+          ? props.coverage_radius_m / 1000
+          : (RADIO_FALLBACK_RADIUS_KM[radio] ?? DEFAULT_RADIUS_KM);
+
+      const rangeSource = typeof props.range_source === "string" ? props.range_source : "fallback";
+
+      const polygon = turfCircle([lon, lat], radiusKm, { steps: 64, units: "kilometers" });
+
+      return [
+        {
+          id: `telecom-coverage-${index}`,
+          name: `${radio} coverage`,
+          source: "telecom",
+          category: "telecom" as const,
+          geometry: polygon.geometry,
+          properties: {
+            radio,
+            range_source: rangeSource,
+            operator: props.operator ?? null,
+            cellid: props.cellid ?? null,
+          },
+        },
+      ];
+    },
+  );
+
+  // Tower point features — physical mast locations rendered as dots on top
+  // of the coverage fill so the exact position remains visible at all zooms.
+  const towerPoints: IntelFeature[] = (data.towers?.features ?? []).flatMap(
+    (feature, index) => {
+      if (!feature.geometry || !isIntelGeometry(feature.geometry)) return [];
+
+      const props = feature.properties ?? {};
+      const radio = typeof props.radio === "string" ? props.radio : "LTE";
+
+      return [
+        {
+          id: `telecom-tower-${index}`,
+          name: typeof props.operator === "string" ? `${props.operator} (${radio})` : `Cell tower (${radio})`,
+          source: "telecom",
+          category: "telecom" as const,
+          geometry: feature.geometry,
+          properties: {
+            radio,
+            operator: props.operator ?? null,
+            cellid: props.cellid ?? null,
+            avg_signal_dbm: props.avg_signal_dbm ?? null,
+            range_source: props.range_source ?? "fallback",
+          },
+        },
+      ];
+    },
+  );
+
+  const features = [...coverageCircles, ...towerPoints];
   return {
     features,
     summary: summary({
       sourceId: "telecom",
       label: "Telecom",
       status: "success",
-      featureCount: features.length,
+      featureCount: towerPoints.length,
       message: typeof data.summary === "string" ? data.summary : undefined,
     }),
     notes: typeof data.summary === "string" ? [data.summary] : [],

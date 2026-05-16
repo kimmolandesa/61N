@@ -1,5 +1,3 @@
-import math
-
 import httpx
 
 from core.cache import TTLCache
@@ -7,102 +5,59 @@ from core.config import settings
 
 OPENCELLID_BASE = "https://opencellid.org/cell/getInArea"
 TIMEOUT_S = 20.0
-_TTL = 3600  # towers move rarely; 1h cache
+_TTL = 3600
 
 _cache = TTLCache()
 
-# Conservative rural coverage radii for Finland terrain (metres)
+# Realistic rural propagation radii for Finland (metres), post-3G shutdown (2024)
 _RADIO_RADIUS_M: dict[str, float] = {
-    'NR':   1_000,   # 5G
-    'LTE':  2_000,   # 4G
-    'UMTS': 5_000,   # 3G
-    'GSM':  8_000,   # 2G
+    'NR':  3_000,   # 5G
+    'LTE': 5_000,   # 4G
+    'GSM': 10_000,  # 2G
 }
-_DEFAULT_RADIUS_M = 3_000
+_DEFAULT_RADIUS_M = 5_000
 
-# MCC 244 = Finland; map MNC prefix → operator name (common MNCs)
+# MCC 244 = Finland; MNC → operator (2026 accurate)
 _OPERATOR: dict[str, str] = {
-    '03': 'DNA', '04': 'DNA', '05': 'Elisa', '07': 'Nokia test',
-    '10': 'TDC', '12': 'DNA', '14': 'Alands Mobiltelefon',
-    '21': 'Ålands Telekommunikation', '91': 'Sonera', '99': 'Tele Finland',
+    '03': 'DNA',
+    '04': 'DNA',
+    '05': 'Elisa',
+    '07': 'Nokia test',
+    '10': 'TDC',
+    '12': 'DNA',
+    '14': 'Alands Mobiltelefon',
+    '21': 'Ålands Telekommunikation',
+    '36': 'Telia',
+    '41': 'Suomen Yhteisverkko (Telia/DNA)',
+    '91': 'Telia',
+    '99': 'Telia',
 }
 
 
-def _operator_name(mnc: int) -> str:
-    return _OPERATOR.get(f"{mnc:02d}", f"MNC-{mnc}")
-
-
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
-def _coverage_grid(
-    towers: list[dict],
-    west: float, south: float, east: float, north: float,
-    step_deg: float = 0.005,   # ~350 m at 60° N
-) -> tuple[list[dict], float]:
-    """
-    Sample grid of (lat, lon) points; mark each covered/uncovered.
-    Returns (grid_features, dead_zone_ratio).
-    """
-    lats = []
-    lat = south + step_deg / 2
-    while lat < north:
-        lats.append(lat)
-        lat += step_deg
-
-    lons = []
-    lon = west + step_deg / 2
-    while lon < east:
-        lons.append(lon)
-        lon += step_deg
-
-    features = []
-    covered_count = 0
-
-    for lat in lats:
-        for lon in lons:
-            covered = False
-            for t in towers:
-                radius_m = t['coverage_radius_m']
-                dist_m = _haversine_m(lat, lon, t['lat'], t['lon'])
-                if dist_m <= radius_m:
-                    covered = True
-                    break
-            if covered:
-                covered_count += 1
-            features.append({
-                'type': 'Feature',
-                'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
-                'properties': {'covered': covered},
-            })
-
-    total = len(features)
-    dead_zone_ratio = round(1.0 - covered_count / total, 3) if total else 0.0
-    return features, dead_zone_ratio
+def _operator_name(mnc_raw: object) -> str | None:
+    try:
+        mnc_str = f"{int(str(mnc_raw).strip()):02d}"
+        return _OPERATOR.get(mnc_str, f"MNC-{mnc_str}")
+    except (ValueError, TypeError):
+        return None
 
 
 async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
     """
-    Cell tower positions and coverage dead-zone map for the bbox.
+    Cell tower positions and coverage metadata for the bbox.
 
-    Returns:
-      towers            — GeoJSON FeatureCollection (point per tower)
-      coverage_grid     — GeoJSON FeatureCollection (~350 m grid, covered bool)
-      dead_zone_ratio   — fraction of grid cells with no cell coverage (0–1)
-      summary           — operational text: comms reliability assessment
+    Returns a GeoJSON FeatureCollection of Point features (one per tower).
+    Coverage circles are drawn client-side from coverage_radius_m + radio type.
     """
     if not settings.OPENCELLID_API_KEY:
         return {
             'error': 'OPENCELLID_API_KEY not configured',
-            'towers': {'type': 'FeatureCollection', 'features': []},
-            'coverage_grid': {'type': 'FeatureCollection', 'features': []},
-            'dead_zone_ratio': None,
+            'towers': {
+                'type': 'FeatureCollection',
+                'features': [],
+                'metadata': {'tower_count': 0, 'truncated': False, 'source': 'OpenCellID'},
+            },
+            'summary': 'unavailable — API key not configured',
         }
 
     west, south, east, north = bbox
@@ -111,11 +66,12 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
     if cached is not None:
         return cached
 
+    limit = 1000
     params = {
         'key':    settings.OPENCELLID_API_KEY,
         'BBOX':   f"{south},{west},{north},{east}",
         'format': 'json',
-        'limit':  1000,
+        'limit':  limit,
     }
 
     async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
@@ -123,64 +79,60 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
         r.raise_for_status()
         raw = r.json()
 
-    tower_meta: list[dict] = []
     tower_features: list[dict] = []
 
     for cell in raw.get('cells', []):
         radio = cell.get('radio', 'LTE')
-        lat = float(cell['lat'])
-        lon = float(cell['lon'])
+        try:
+            lat = float(cell['lat'])
+            lon = float(cell['lon'])
+        except (KeyError, TypeError, ValueError):
+            continue
 
         api_range = cell.get('range')
-        if isinstance(api_range, int) and 0 < api_range <= 50000:
+        if isinstance(api_range, int) and 0 < api_range <= 50_000:
             radius_m = api_range
             range_source = 'api'
         else:
             radius_m = _RADIO_RADIUS_M.get(radio, _DEFAULT_RADIUS_M)
             range_source = 'fallback'
 
-        tower_meta.append({'lat': lat, 'lon': lon, 'coverage_radius_m': radius_m})
         tower_features.append({
             'type': 'Feature',
             'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
             'properties': {
-                'radio':              radio,
-                'mcc':                cell.get('mcc'),
-                'mnc':                cell.get('mnc'),
-                'operator':           _operator_name(int(cell['mnc'])) if cell.get('mnc') else None,
-                'lac':                cell.get('lac'),
-                'cellid':             cell.get('cellid'),
-                'avg_signal_dbm':     cell.get('averageSignalStrength'),
-                'coverage_radius_m':  radius_m,
-                'range_source':       range_source,
+                'radio':             radio,
+                'mcc':               cell.get('mcc'),
+                'mnc':               cell.get('mnc'),
+                'operator':          _operator_name(cell.get('mnc')),
+                'lac':               cell.get('lac'),
+                'cellid':            cell.get('cellid'),
+                'avg_signal_dbm':    cell.get('averageSignalStrength'),
+                'coverage_radius_m': radius_m,
+                'range_source':      range_source,
             },
         })
 
-    grid_features, dead_zone_ratio = _coverage_grid(tower_meta, west, south, east, north)
+    tower_count = len(tower_features)
+    truncated = tower_count >= limit
 
-    if dead_zone_ratio > 0.7:
-        summary = 'poor — majority of area has no cell coverage; SIGINT blind spots likely'
-    elif dead_zone_ratio > 0.4:
-        summary = 'degraded — significant dead zones; communications unreliable in gaps'
-    elif dead_zone_ratio > 0.1:
-        summary = 'moderate — isolated dead zones; verify coverage on planned routes'
+    if tower_count == 0:
+        summary = 'no data — no cell towers found in this area'
+    elif truncated:
+        summary = f'data truncated — at least {tower_count} towers in area; zoom in for full detail'
     else:
-        summary = 'good — most of the area has cell coverage'
+        summary = f'{tower_count} tower{"s" if tower_count != 1 else ""} found in area'
 
     result = {
         'towers': {
             'type': 'FeatureCollection',
             'features': tower_features,
             'metadata': {
-                'tower_count': len(tower_features),
+                'tower_count': tower_count,
+                'truncated': truncated,
                 'source': 'OpenCellID',
             },
         },
-        'coverage_grid': {
-            'type': 'FeatureCollection',
-            'features': grid_features,
-        },
-        'dead_zone_ratio': dead_zone_ratio,
         'summary': summary,
     }
 

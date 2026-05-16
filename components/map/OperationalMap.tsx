@@ -319,21 +319,37 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: {
         "fill-color": [
-          "match",
-          ["get", "category"],
-          "terrain",
-          "#166534",
-          "population",
-          "#7c3aed",
-          "weather",
-          "#0f766e",
-          "telecom",
-          "#1d4ed8",
-          "satellite",
-          "#7c2d12",
-          "#475569",
+          "case",
+          ["==", ["get", "category"], "telecom"],
+          // Telecom: color by radio technology.
+          [
+            "match",
+            ["get", "radio"],
+            "NR",   "#f15b40",   // 5G  — orange-red
+            "LTE",  "#3887be",   // 4G  — blue
+            "UMTS", "#3bb2d0",   // 3G  — light blue
+            "GSM",  "#aaaaaa",   // 2G  — gray
+            "#999999",           // unknown
+          ],
+          // All other categories.
+          [
+            "match",
+            ["get", "category"],
+            "terrain",    "#166534",
+            "population", "#7c3aed",
+            "weather",    "#0f766e",
+            "satellite",  "#7c2d12",
+            "#475569",
+          ],
         ],
-        "fill-opacity": 0.18,
+        "fill-opacity": [
+          "case",
+          // Fallback radius = estimated coverage → lighter fill.
+          ["all", ["==", ["get", "category"], "telecom"], ["==", ["get", "range_source"], "fallback"]], 0.15,
+          // API-provided radius = operator-verified → solid fill.
+          ["==", ["get", "category"], "telecom"], 0.4,
+          0.18,
+        ],
       },
     });
   }
@@ -343,7 +359,8 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       id: INTEL_FILL_OUTLINE_LAYER_ID,
       type: "line",
       source: INTEL_SOURCE_ID,
-      filter: ["==", ["geometry-type"], "Polygon"],
+      // Suppress outlines on telecom dead-zone cells — they tile densely and the grid lines are noise.
+      filter: ["all", ["==", ["geometry-type"], "Polygon"], ["!=", ["get", "category"], "telecom"]],
       paint: {
         "line-color": "#334155",
         "line-width": 2,
@@ -383,24 +400,43 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       source: INTEL_SOURCE_ID,
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
-        "circle-radius": 6,
-        "circle-color": [
+        "circle-radius": [
           "match",
           ["get", "category"],
-          "weather",
-          "#0f766e",
-          "terrain",
-          "#166534",
-          "population",
-          "#7c3aed",
           "telecom",
-          "#2563eb",
-          "satellite",
-          "#92400e",
-          "#ef4444",
+          8,
+          6,
+        ],
+        "circle-color": [
+          "case",
+          ["==", ["get", "category"], "telecom"],
+          // Tower dot matches its coverage ring color so the two are linked visually.
+          [
+            "match",
+            ["get", "radio"],
+            "NR",   "#f15b40",
+            "LTE",  "#3887be",
+            "UMTS", "#3bb2d0",
+            "GSM",  "#aaaaaa",
+            "#999999",
+          ],
+          [
+            "match",
+            ["get", "category"],
+            "weather",    "#0f766e",
+            "terrain",    "#166534",
+            "population", "#7c3aed",
+            "satellite",  "#92400e",
+            "#ef4444",
+          ],
         ],
         "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 1.5,
+        "circle-stroke-width": [
+          "match",
+          ["get", "category"],
+          "telecom", 2,
+          1.5,
+        ],
       },
     });
   }
