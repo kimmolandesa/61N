@@ -128,9 +128,16 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
 
     for cell in raw.get('cells', []):
         radio = cell.get('radio', 'LTE')
-        radius_m = _RADIO_RADIUS_M.get(radio, _DEFAULT_RADIUS_M)
         lat = float(cell['lat'])
         lon = float(cell['lon'])
+
+        api_range = cell.get('range')
+        if isinstance(api_range, int) and 0 < api_range <= 50000:
+            radius_m = api_range
+            range_source = 'api'
+        else:
+            radius_m = _RADIO_RADIUS_M.get(radio, _DEFAULT_RADIUS_M)
+            range_source = 'fallback'
 
         tower_meta.append({'lat': lat, 'lon': lon, 'coverage_radius_m': radius_m})
         tower_features.append({
@@ -145,6 +152,7 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
                 'cellid':             cell.get('cellid'),
                 'avg_signal_dbm':     cell.get('averageSignalStrength'),
                 'coverage_radius_m':  radius_m,
+                'range_source':       range_source,
             },
         })
 
