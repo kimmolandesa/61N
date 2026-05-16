@@ -15,10 +15,13 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Asset } from "@/lib/types";
+import type { IntelFeature } from "@/lib/intel/types";
+import type { WeatherForecastEntry } from "@/lib/intel/weather";
 import AssetInfoModal from "./AssetInfoModal";
 
 interface MapViewProps {
   results: Asset[];
+  weatherFeatures: IntelFeature[];
   bounds: [number, number, number, number] | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -239,8 +242,16 @@ const blueDotIcon = L.divIcon({
   popupAnchor: [0, -8],
 });
 
+const WEATHER_ICONS: Record<string, string> = {
+  clear: "☀",
+  clouds: "☁",
+  rain: "☂",
+  snow: "❄",
+};
+
 export default function MapView({
   results,
+  weatherFeatures,
   bounds,
   selectedId,
   onSelect,
@@ -254,6 +265,7 @@ export default function MapView({
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const markerClusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const weatherLayerRef = useRef<L.LayerGroup | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const tileLayersRef = useRef<Map<string, L.TileLayer>>(new Map());
@@ -420,6 +432,7 @@ export default function MapView({
     };
 
     document.addEventListener("click", handlePopupClick);
+    weatherLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
 
@@ -436,6 +449,11 @@ export default function MapView({
         layer.remove();
       });
       tileLayersRef.current.clear();
+      if (weatherLayerRef.current) {
+        weatherLayerRef.current.clearLayers();
+        weatherLayerRef.current.remove();
+        weatherLayerRef.current = null;
+      }
       if (markerClusterRef.current) {
         markerClusterRef.current.clearLayers();
         markerClusterRef.current = null;
@@ -473,6 +491,50 @@ export default function MapView({
           <button class="popup-more-info-btn" data-asset-id="${escapeHtml(asset.id)}">More Info</button>
           <a class="popup-osm-link" href="https://www.openstreetmap.org/${asset.id}" target="_blank" rel="noopener noreferrer">View on OSM</a>
         </div>
+      </div>
+    `;
+  }, []);
+
+  const createWeatherPopupContent = useCallback((feature: IntelFeature): string => {
+    const safeName = escapeHtml(feature.name ?? "Weather Forecast");
+    const conditionLabel =
+      typeof feature.properties.conditionLabel === "string"
+        ? escapeHtml(feature.properties.conditionLabel)
+        : "Forecast";
+    const forecast = Array.isArray(feature.properties.forecast)
+      ? (feature.properties.forecast as WeatherForecastEntry[])
+      : [];
+
+    const rows = forecast
+      .slice(0, 6)
+      .map((entry) => {
+        const icon = WEATHER_ICONS[entry.condition] ?? "•";
+        const time = new Date(entry.time).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const temp =
+          typeof entry.temperature === "number"
+            ? `${entry.temperature.toFixed(1)}°C`
+            : "n/a";
+        const clouds =
+          typeof entry.cloudCover === "number"
+            ? `${Math.round(entry.cloudCover)}% cloud`
+            : "cloud n/a";
+        const precipitation =
+          typeof entry.precipitationAmount === "number"
+            ? `${entry.precipitationAmount.toFixed(1)} mm`
+            : "dry";
+
+        return `<tr><td class="popup-key">${icon} ${time}</td><td class="popup-value">${temp} · ${clouds} · ${precipitation}</td></tr>`;
+      })
+      .join("");
+
+    return `
+      <div class="map-popup">
+        <div class="popup-title">${safeName}</div>
+        <div class="popup-type">${conditionLabel}</div>
+        ${rows ? `<table class="popup-tags">${rows}</table>` : ""}
       </div>
     `;
   }, []);
@@ -673,6 +735,72 @@ export default function MapView({
   }, [filteredResults, bounds, onSelect, createPopupContent, showClusters]);
 
   useEffect(() => {
+    const weatherLayer = weatherLayerRef.current;
+    if (!weatherLayer) return;
+
+    weatherLayer.clearLayers();
+
+    for (const feature of weatherFeatures) {
+      if (feature.geometry.type !== "Point") {
+        continue;
+      }
+
+      const [lon, lat] = feature.geometry.coordinates;
+      if (!isValidCoordinate(lat, lon)) {
+        continue;
+      }
+
+      const condition =
+        typeof feature.properties.condition === "string"
+          ? feature.properties.condition
+          : "clear";
+      const icon = WEATHER_ICONS[condition] ?? "☀";
+
+      const weatherIcon = L.divIcon({
+        className: "marker-weather",
+        html: `<div class="weather-marker-pin">${escapeHtml(icon)}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14],
+      });
+
+      const marker = L.marker([lat, lon], {
+        icon: weatherIcon,
+        keyboard: true,
+      });
+
+      marker.bindPopup(() => createWeatherPopupContent(feature), {
+        maxWidth: 340,
+        className: "dark-popup weather-popup",
+        autoPan: true,
+      });
+
+      weatherLayer.addLayer(marker);
+    }
+  }, [weatherFeatures, createWeatherPopupContent]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !bounds) return;
+    if (filteredResults.length > 0 || weatherFeatures.length === 0) return;
+
+    try {
+      const latLngBounds = L.latLngBounds(
+        [bounds[0], bounds[2]],
+        [bounds[1], bounds[3]],
+      );
+
+      if (latLngBounds.isValid()) {
+        map.fitBounds(latLngBounds, {
+          padding: [50, 50],
+          maxZoom: 11,
+          animate: true,
+        });
+      }
+    } catch {}
+  }, [bounds, filteredResults.length, weatherFeatures.length]);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapMountedRef.current) return;
 
@@ -832,6 +960,9 @@ export default function MapView({
           </label>
         </div>
         <div ref={containerRef} className="map-inner" />
+        {weatherFeatures.length > 0 && (
+          <div className="weather-overlay-badge">Weather forecast overlay</div>
+        )}
         {filteredResults.length === 0 && results.length > 0 && (
           <div className="map-overlay">
             <span>No results match current filters</span>

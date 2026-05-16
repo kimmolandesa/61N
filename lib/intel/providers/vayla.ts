@@ -138,7 +138,7 @@ export async function convertRoadAddressToRail<T = unknown>(
   options: VaylaRequestOptions = {},
 ): Promise<T> {
   const url = new URL('tieradaksi', buildBaseUrl(VAYLA_BASE_URLS.tiera));
-  appendDefinedSearchParams(url, request);
+  appendDefinedSearchParams(url, { ...request });
   return fetchVaylaJson<T>(url, options);
 }
 
@@ -147,7 +147,7 @@ export async function convertRailAddressToRoad<T = unknown>(
   options: VaylaRequestOptions = {},
 ): Promise<T> {
   const url = new URL('ratatieksi', buildBaseUrl(VAYLA_BASE_URLS.tiera));
-  appendDefinedSearchParams(url, request);
+  appendDefinedSearchParams(url, { ...request });
   return fetchVaylaJson<T>(url, options);
 }
 

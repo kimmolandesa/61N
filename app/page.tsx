@@ -7,7 +7,8 @@ import SearchBar from "@/components/SearchBar";
 import ShareButton from "@/components/ShareButton";
 import Filters from "@/components/Filters";
 import ResultList from "@/components/ResultList";
-import type { SearchResult, SearchError } from "@/lib/types";
+import type { SearchResult, SearchError, GeoResult } from "@/lib/types";
+import type { IntelFeature } from "@/lib/intel/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -80,6 +81,10 @@ function HomeContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterOperator, setFilterOperator] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
+  const [weatherFeatures, setWeatherFeatures] = useState<IntelFeature[]>([]);
+  const [weatherBounds, setWeatherBounds] = useState<
+    [number, number, number, number] | null
+  >(null);
 
   // UI state
   const [mobileTab, setMobileTab] = useState<MobileTab>("map");
@@ -107,6 +112,8 @@ function HomeContent() {
       setFilterOperator(null);
       setFilterType(null);
       setCurrentQuery(query);
+      setWeatherFeatures([]);
+      setWeatherBounds(null);
 
       if (updateUrl) {
         const params = new URLSearchParams();
@@ -124,8 +131,26 @@ function HomeContent() {
         const data = await response.json();
 
         if (!response.ok) {
-          setError((data as SearchError).error);
-          setSearchResult(null);
+          const weatherResponse = await fetch("/api/weather", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          });
+
+          if (weatherResponse.ok) {
+            const weatherData = (await weatherResponse.json()) as {
+              location: GeoResult;
+              features: IntelFeature[];
+            };
+
+            setSearchResult(null);
+            setWeatherBounds(weatherData.location.boundingBox);
+            setWeatherFeatures(weatherData.features);
+            setError(null);
+          } else {
+            setError((data as SearchError).error);
+            setSearchResult(null);
+          }
         } else {
           setSearchResult(data as SearchResult);
           setError(null);
@@ -319,7 +344,8 @@ function HomeContent() {
         >
           <MapView
             results={searchResult?.results || []}
-            bounds={searchResult?.bounds || null}
+            weatherFeatures={weatherFeatures}
+            bounds={searchResult?.bounds || weatherBounds || null}
             selectedId={selectedId}
             onSelect={handleSelect}
             filterOperator={filterOperator}
