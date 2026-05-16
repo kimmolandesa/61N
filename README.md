@@ -1,544 +1,458 @@
 # Sightline
 
-Geospatial infrastructure intelligence platform for discovering and analyzing physical-world assets using OpenStreetMap data.
+Sightline is a geospatial intelligence workspace built with Next.js, TypeScript, MapLibre GL JS, and Terra Draw.
 
-![screenshot2](screenshots/screenshot2.png)
-![screenshot](screenshots/screenshot.png)
+The application is designed around a document-editor-style workflow:
 
-## Overview
+- the map is the central working canvas
+- users define one or more Areas of Interest as `Sections`
+- each Section maintains its own notes, geometry, filters, and fetched intelligence
+- intelligence is fetched through backend API routes and rendered back onto the selected Section
 
-Sightline enables searching, monitoring, and analyzing real-world infrastructure including:
+This repository currently focuses on frontend-heavy spatial analysis workflows backed by a custom intelligence API layer.
 
-- Telecommunications towers and data centers
-- Power plants, substations, and energy storage
-- Airports, helipads, and cable transport (gondolas, funiculars)
-- Ports, harbours, piers, and maritime facilities
-- Warehouses and industrial facilities
-- Pipelines, refineries, and energy infrastructure
-- Military installations
-- Hospitals, prisons, embassies, and government facilities
-- Surveillance cameras and emergency infrastructure
-- Transportation hubs (train stations, bus stations, taxi stands)
+![Sightline Screenshot](screenshots/screenshot2.png)
 
-And many more asset types across 30+ categories with over 200 searchable infrastructure types.
+## What Sightline Does
 
-## Architecture
+Sightline combines three main capabilities:
+
+1. Section-based map analysis
+   Users can draw, save, select, rename, and delete multiple AOIs directly on the map.
+
+2. Per-section intelligence workflows
+   Each Section stores its own chosen data sources and fetched intelligence state independently from other Sections.
+
+3. Multi-source geospatial overlays
+   Intelligence is aggregated through `/api/intel`, normalized as GeoJSON, clipped to the selected AOI, and rendered on the map.
+
+In practice, this means one Section can focus on weather and terrain while another focuses on bridges, telecom, and logistics without those states bleeding into each other.
+
+## Current Product Model
+
+The current frontend revolves around these concepts:
+
+### Sections
+
+A Section is a drawn AOI plus lightweight project metadata:
+
+- `id`
+- `name`
+- `notes`
+- `geometry`
+- `bounds`
+- `selectedFilters`
+- timestamps
+- in-memory intelligence state
+
+Sections appear in the left panel and are rendered on the map simultaneously.
+
+### Intelligence
+
+When the user clicks `Fetch Intelligence`, the selected Section is sent to:
+
+```http
+POST /api/intel
+```
+
+The payload includes:
+
+- AOI geometry
+- AOI bbox
+- selected data-source filters
+
+The response is normalized into GeoJSON, filtered client-side so only features inside or intersecting the AOI remain, and then rendered immediately for the selected Section.
+
+### Workspace Layout
+
+The UI is structured like a document editor:
+
+- top toolbar
+- left panel for Sections and data-source controls
+- center map canvas
+- right inspector for Section notes, metadata, and intelligence status
+
+## Core Features
+
+### AOI authoring
+
+The app supports map-based AOI creation using Terra Draw:
+
+- polygon
+- rectangle
+- circle
+- freehand
+- select/edit
+
+### Base maps
+
+The MapLibre canvas supports multiple basemaps:
+
+- Streets / Standard
+- Terrain
+- Satellite
+- MML / National Land Survey raster
+- Dark / Tactical placeholder
+
+### Section-scoped intelligence
+
+Each Section has isolated filter state. Supported frontend filter categories are:
+
+- `terrain`
+- `weather`
+- `infrastructure`
+- `roads`
+- `bridges`
+- `population`
+- `telecom`
+- `satellite`
+- `healthcare`
+- `power`
+- `water`
+- `logistics`
+
+### AOI-aware clipping
+
+Fetched intelligence is clipped on the client before display:
+
+- `Point` features must be inside the selected AOI
+- `LineString`, `MultiLineString`, `Polygon`, and `MultiPolygon` features must intersect the selected AOI
+
+This is implemented with Turf.
+
+### Persistence model
+
+Only lightweight Section metadata is persisted to `localStorage`.
+
+Persisted:
+
+- id
+- name
+- notes
+- comments
+- geometry
+- bounds
+- center
+- selected filters
+- timestamps
+
+Not persisted:
+
+- fetched GeoJSON intelligence
+- loading state
+- temporary map overlays
+- weather/terrain/intel responses
+
+That keeps local storage small and avoids quota errors.
+
+## Technical Architecture
 
 ```mermaid
-flowchart TB
-    classDef frontend fill:#6366f1,stroke:#4338ca,color:#fff
-    classDef backend fill:#0ea5e9,stroke:#0284c7,color:#fff
-    classDef external fill:#f59e0b,stroke:#d97706,color:#fff
+flowchart LR
+    classDef ui fill:#0f172a,stroke:#1e293b,color:#fff
+    classDef map fill:#0f766e,stroke:#115e59,color:#fff
+    classDef state fill:#7c3aed,stroke:#6d28d9,color:#fff
+    classDef api fill:#2563eb,stroke:#1d4ed8,color:#fff
+    classDef providers fill:#ea580c,stroke:#c2410c,color:#fff
 
-    subgraph FE["Frontend"]
-        SearchBar["SearchBar"]
-        Filters["Filters"]
-        ResultList["ResultList"]
-        MapView["MapView — Leaflet.js"]
+    subgraph Frontend
+      AppShell["AppShell / page.tsx"]
+      LeftPanel["LeftPanel"]
+      Map["OperationalMap"]
+      Inspector["RightInspector"]
+      AoiHook["useAoiManager"]
     end
 
-    subgraph BE["Backend"]
-        route["route.ts — Request Handler"]
-        parser["parser.ts — NLP Engine"]
-        geo["geo.ts — Geocoding"]
-        overpass["overpass.ts — OSM Query Builder"]
-        cache["cache.ts — Cache Layer"]
+    subgraph Backend
+      Search["/api/search"]
+      AoiSearch["/api/aoi/search"]
+      Intel["/api/intel"]
+      Weather["/api/weather"]
     end
 
-    subgraph EX["External APIs"]
-        Nominatim["Nominatim — Geocoding API"]
-        OverpassAPI["Overpass API — OSM Data"]
+    subgraph Providers
+      Keb["api.kebabkartta.fi"]
+      OSM["OSM / Overpass / Nominatim"]
+      Ext["Provider wrappers in lib/intel/providers"]
     end
 
-    SearchBar & Filters & ResultList & MapView -->|"POST /api/search"| route
+    AppShell --> LeftPanel
+    AppShell --> Map
+    AppShell --> Inspector
+    LeftPanel --> AoiHook
+    Inspector --> AoiHook
+    Map --> AoiHook
 
-    route -->|"parse query"| parser
-    route -->|"resolve location"| geo
-    route -->|"fetch POIs"| overpass
-    route <-->|"read / write"| cache
+    LeftPanel --> Intel
+    LeftPanel --> AoiSearch
+    AppShell --> Search
+    AppShell --> Weather
 
-    geo -->|"geocode"| Nominatim
-    overpass -->|"QL query"| OverpassAPI
+    Intel --> Keb
+    AoiSearch --> OSM
+    Search --> OSM
+    Weather --> Ext
 
-    class SearchBar,Filters,ResultList,MapView frontend
-    class route,parser,geo,overpass,cache backend
-    class Nominatim,OverpassAPI external
+    class AppShell,LeftPanel,Map,Inspector ui
+    class Map map
+    class AoiHook state
+    class Search,AoiSearch,Intel,Weather api
+    class Keb,OSM,Ext providers
 ```
 
-## Data Sources
+## Important Files
 
-### OpenStreetMap
+These are the main entrypoints and modules worth understanding first.
 
-All infrastructure data comes from [OpenStreetMap](https://www.openstreetmap.org/), a collaborative mapping project. OSM data is crowd-sourced and may contain inaccuracies or gaps.
+### Frontend shell
 
-### Nominatim
+- [app/page.tsx](app/page.tsx)
+  Main client page that coordinates Section state, fetch actions, and map/inspector layout.
 
-Geographic resolution uses the [Nominatim](https://nominatim.openstreetmap.org/) geocoding service to convert place names to bounding boxes and coordinates.
+- [components/layout/AppShell.tsx](components/layout/AppShell.tsx)
+  The document-style page frame.
 
-### Overpass API
+- [components/layout/LeftPanel.tsx](components/layout/LeftPanel.tsx)
+  Sections list, data-source filters, fetch action, and AOI search UI.
 
-Infrastructure queries execute against the [Overpass API](https://overpass-api.de/), which provides read-only access to OSM data.
+- [components/layout/RightInspector.tsx](components/layout/RightInspector.tsx)
+  Selected Section notes and intelligence summary.
 
-## Query Syntax
+- [components/layout/TopToolbar.tsx](components/layout/TopToolbar.tsx)
+  Toolbar for file actions, drawing tools, and basemap switching.
 
-### Natural Language
+### Map + drawing
 
-```
-telecom towers in karnataka
-power plants near mumbai
-data centers in california
-airports in germany
-```
+- [components/map/OperationalMap.tsx](components/map/OperationalMap.tsx)
+  MapLibre map, Terra Draw integration, AOI rendering, intelligence overlays, and popups.
 
-### Structured Queries
+### AOI / Section state
 
-```
-type:telecom operator:airtel region:karnataka
-type:data_center operator:google
-type:substation region:texas
-type:airport country:france
-```
+- [hooks/useAoiManager.ts](hooks/useAoiManager.ts)
+  Central React hook for Section state, selection, filters, persistence, and in-memory intelligence state.
 
-### Supported Parameters
+- [lib/aoi/types.ts](lib/aoi/types.ts)
+  Section, AOI, persistence, and intel state types.
 
-| Parameter | Description | Example |
-|-----------|-------------|---------|
-| `type:` | Asset type | `type:power_plant` |
-| `operator:` | Operator/owner | `operator:google` |
-| `region:` | State/region | `region:bavaria` |
-| `country:` | Country | `country:india` |
-| `near:` | Proximity search | `near:london` |
-| `radius:` | Search radius (km) | `radius:100` |
+- [lib/aoi/utils.ts](lib/aoi/utils.ts)
+  AOI geometry normalization, area calculation, bounds, and creation helpers.
 
-### Supported Asset Types
+- [lib/aoi/persistence.ts](lib/aoi/persistence.ts)
+  Lightweight persisted Section conversion.
 
-#### Energy & Power
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `power_plant` | `powerplant` | Power generation facilities |
-| `substation` | - | Electrical substations |
-| `transformer` | - | Power transformers |
-| `converter` | - | Power converters |
-| `switch` | - | Power switches |
-| `power_line` | - | High voltage power lines |
-| `power_pole` | - | Power distribution poles |
-| `solar` | - | Solar farms and panels |
-| `wind` | - | Wind farms and turbines |
-| `nuclear` | `nuclear_site` | Nuclear power plants |
-| `hydroelectric` | - | Hydroelectric plants |
-| `geothermal` | - | Geothermal plants |
-| `coal` | - | Coal power plants |
-| `gas_power` | - | Gas power plants |
-| `oil_power` | - | Oil power plants |
-| `biogas` | - | Biogas plants |
-| `biomass` | - | Biomass plants |
-| `tidal` | - | Tidal power plants |
-| `battery_storage` | - | Battery energy storage |
+- [lib/aoi/storage.ts](lib/aoi/storage.ts)
+  Local storage read/write helpers.
 
-#### Telecommunications
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `telecom` | `tower` | Telecom towers |
-| `antenna` | - | Antennas |
-| `mast` | - | Communication masts |
-| `cell_tower` | - | Mobile cell towers |
-| `radio_tower` | - | Radio transmission towers |
-| `broadcast_tower` | - | TV/Radio broadcast towers |
-| `satellite_dish` | - | Satellite dishes |
-| `telephone_exchange` | - | Telephone exchanges |
-| `data_center` | `datacenter` | Data centers |
+### Intelligence pipeline
 
-#### Oil, Gas & Mining
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `refinery` | - | Oil refineries |
-| `pipeline` | - | Pipelines |
-| `oil_well` | - | Oil extraction wells |
-| `gas_well` | - | Gas extraction wells |
-| `storage_tank` | - | Fuel/liquid storage tanks |
-| `silo` | - | Storage silos |
-| `gasometer` | - | Gas storage tanks |
-| `quarry` | `mine` | Quarries and mines |
-| `landfill` | - | Landfill sites |
-| `scrap_yard` | - | Scrap yards |
+- [lib/intel/client.ts](lib/intel/client.ts)
+  Frontend fetch client for `/api/intel`.
 
-#### Water & Utilities
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `water_tower` | - | Water towers |
-| `water_treatment` | - | Water treatment plants |
-| `wastewater` | `sewage`, `sewage_plant` | Wastewater plants |
-| `dam` | - | Dams |
-| `reservoir` | - | Reservoirs |
-| `pumping_station` | - | Water pumping stations |
-| `water_well` | - | Water wells |
+- [lib/intel/normalizeFeatureProperties.ts](lib/intel/normalizeFeatureProperties.ts)
+  Defensive normalization for frontend intelligence features.
 
-#### Aviation
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `airport` | - | Airports |
-| `helipad` | - | Helipads |
-| `airfield` | - | Military/private airfields |
-| `runway` | - | Airport runways |
-| `taxiway` | - | Airport taxiways |
-| `terminal` | - | Airport terminals |
-| `hangar` | - | Aircraft hangars |
-| `atc_tower` | - | Air traffic control towers |
+- [lib/geo/filterFeaturesToAoi.ts](lib/geo/filterFeaturesToAoi.ts)
+  Turf-based AOI clipping.
 
-#### Maritime
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `port` | `seaport` | Ports and seaports |
-| `harbour` | - | Harbours |
-| `ferry_terminal` | - | Ferry terminals |
-| `marina` | - | Marinas |
-| `shipyard` | - | Shipyards |
-| `dock` | - | Docks |
-| `lighthouse` | - | Lighthouses |
-| `pier` | - | Piers |
-| `jetty` | - | Jetties |
-| `slipway` | - | Boat slipways |
-| `mooring` | - | Moorings |
-| `boat_lift` | - | Boat lifts |
+- [app/api/intel/route.ts](app/api/intel/route.ts)
+  Backend intelligence aggregator route.
 
-#### Rail & Transit
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `train_station` | - | Train stations |
-| `railyard` | `rail_yard` | Rail yards |
-| `metro` | - | Metro/subway stations |
-| `tram_stop` | - | Tram stops |
-| `halt` | - | Railway halts |
-| `level_crossing` | - | Level crossings |
-| `bus_station` | - | Bus stations |
-| `parking` | - | Parking facilities |
-| `toll_booth` | - | Toll booths |
-| `weigh_station` | - | Truck weigh stations |
-| `rest_area` | - | Highway rest areas |
-| `service_area` | - | Highway service areas |
+### Search and weather
 
-#### Structures
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `building` | - | General buildings |
-| `bridge` | - | Bridges |
-| `tunnel` | - | Tunnels |
-| `cooling_tower` | - | Cooling towers |
-| `chimney` | - | Industrial chimneys |
-| `crane` | - | Cranes |
-| `windmill` | - | Windmills |
-| `watermill` | - | Watermills |
-| `clock_tower` | - | Clock towers |
-| `bell_tower` | - | Bell towers |
+- [app/api/search/route.ts](app/api/search/route.ts)
+  General search route.
 
-#### Industrial & Commercial
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `warehouse` | - | Warehouses |
-| `factory` | - | Factories |
-| `industrial` | - | Industrial zones |
-| `works` | - | Industrial works |
-| `depot` | - | Depots |
-| `brewery` | - | Breweries |
-| `distillery` | - | Distilleries |
-| `sawmill` | - | Sawmills |
-| `slaughterhouse` | - | Slaughterhouses |
-| `recycling_plant` | `recycling` | Recycling plants |
+- [app/api/aoi/search/route.ts](app/api/aoi/search/route.ts)
+  AOI-scoped OSM search route.
 
-#### Military & Defense
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `military` | - | Military installations |
-| `bunker` | - | Bunkers |
-| `barracks` | - | Military barracks |
-| `naval_base` | - | Naval bases |
-| `range` | - | Firing/shooting ranges |
-| `checkpoint` | - | Military checkpoints |
-| `radar` | - | Radar installations |
+- [app/api/weather/route.ts](app/api/weather/route.ts)
+  Weather fallback route.
 
-#### Government & Public Safety
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `embassy` | - | Embassies |
-| `courthouse` | - | Courthouses |
-| `townhall` | - | Town halls |
-| `government` | - | Government offices |
-| `customs` | - | Customs offices |
-| `tax_office` | - | Tax offices |
-| `border_control` | - | Border control points |
-| `police` | - | Police stations |
-| `fire_station` | - | Fire stations |
-| `prison` | - | Prisons |
-| `ambulance_station` | - | Ambulance stations |
-| `rescue_station` | - | Rescue stations |
-| `coast_guard` | - | Coast guard stations |
-| `emergency_phone` | - | Emergency phones |
-| `fire_hydrant` | - | Fire hydrants |
-| `lifeguard` | - | Lifeguard stations |
-| `surveillance_camera` | `cctv` | Surveillance cameras |
+## Data Sources and Integrations
 
-#### Education & Research
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `school` | - | Schools |
-| `university` | - | Universities |
-| `college` | - | Colleges |
-| `kindergarten` | - | Kindergartens |
-| `driving_school` | - | Driving schools |
-| `research` | - | Research institutes |
-| `library` | - | Libraries |
+The frontend is intentionally decoupled from individual providers. It sends AOI geometry, bbox, and selected filters to `/api/intel`; the backend decides which providers to call.
 
-#### Healthcare
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `hospital` | - | Hospitals |
-| `clinic` | - | Clinics |
-| `pharmacy` | - | Pharmacies |
-| `dentist` | - | Dental practices |
-| `veterinary` | - | Veterinary clinics |
-| `nursing_home` | - | Nursing homes |
-| `hospice` | - | Hospices |
-| `blood_bank` | - | Blood banks |
+### Intelligence providers
 
-#### Culture & Entertainment
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `museum` | - | Museums |
-| `theatre` | - | Theatres |
-| `cinema` | - | Cinemas |
-| `stadium` | - | Stadiums |
-| `sports_centre` | - | Sports centres |
-| `swimming_pool` | - | Swimming pools |
-| `golf_course` | - | Golf courses |
-| `racetrack` | - | Racetracks |
-| `ice_rink` | - | Ice rinks |
+The repository contains provider and source-adapter modules under:
 
-#### Tourism & Leisure
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `hotel` | - | Hotels |
-| `campsite` | - | Campsites |
-| `caravan_site` | - | Caravan sites |
-| `theme_park` | - | Theme parks |
-| `zoo` | - | Zoos |
-| `aquarium` | - | Aquariums |
-| `viewpoint` | - | Viewpoints |
-| `attraction` | - | Tourist attractions |
-| `information` | - | Tourist information centers |
-| `picnic_site` | - | Picnic sites |
+- `lib/intel/providers/*`
+- `lib/intel/sources/*`
 
-#### Religious
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `church` | - | Churches |
-| `mosque` | - | Mosques |
-| `temple` | - | Temples |
-| `synagogue` | - | Synagogues |
-| `place_of_worship` | - | General places of worship |
-| `cemetery` | - | Cemeteries |
+Examples include:
 
-#### Historic
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `monument` | - | Monuments |
-| `memorial` | - | Memorials |
-| `castle` | - | Castles |
-| `fort` | - | Forts |
-| `ruins` | - | Ruins |
-| `archaeological_site` | - | Archaeological sites |
-| `observatory` | - | Observatories |
+- FMI
+- Maanmittauslaitos
+- OpenCellID
+- Väylä
+- satellite and telecom-related integrations
 
-#### Agriculture
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `farm` | - | Farms |
-| `greenhouse` | - | Greenhouses |
-| `orchard` | - | Orchards |
-| `vineyard` | - | Vineyards |
+### Backend geospatial API
 
-#### Services
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `bank` | - | Banks |
-| `atm` | - | ATMs |
-| `post_office` | - | Post offices |
-| `post_box` | - | Post boxes |
-| `fuel` | `gas_station`, `petrol` | Fuel stations |
-| `charging_station` | - | EV charging stations |
-| `taxi_stand` | - | Taxi stands |
-| `car_wash` | - | Car washes |
-| `bicycle_repair` | - | Bicycle repair stations |
+The custom backend API documented in [API.md](API.md) is currently central to the intelligence pipeline.
 
-#### Public Utilities
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `bicycle_parking` | - | Bicycle parking |
-| `drinking_water` | - | Drinking water fountains |
-| `public_toilet` | - | Public toilets |
-| `bench` | - | Public benches |
-| `waste_basket` | - | Waste baskets |
-| `street_lamp` | - | Street lamps |
-| `traffic_signals` | - | Traffic signals |
-| `telephone` | - | Public telephones |
+It includes endpoints for:
 
-#### Cable Transport
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `aerialway` | - | Cable cars |
-| `gondola` | - | Gondolas |
-| `funicular` | - | Funiculars |
-| `chairlift` | - | Chairlifts |
+- raster/vector tiles
+- bbox feature queries
+- terrain data
+- weather observations and forecasts
+- logistics and chokepoints
+- bridges
+- population intelligence
+- communications / telecom intelligence
+- satellite pass information
 
-#### Emergency Infrastructure (Additional)
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `siren` | - | Emergency sirens |
-| `defibrillator` | - | Public defibrillators |
-| `assembly_point` | - | Emergency assembly points |
-| `life_ring` | - | Life rings |
+## Running the Project
 
-#### Commercial & Retail
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `supermarket` | - | Supermarkets |
-| `mall` | - | Shopping malls |
-| `marketplace` | - | Marketplaces |
+### Requirements
 
-#### Shared Mobility
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `bicycle_rental` | - | Bike sharing stations |
-| `car_sharing` | - | Car sharing locations |
-
-#### Science & Research (Additional)
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `planetarium` | - | Planetariums |
-| `laboratory` | - | Laboratories |
-
-#### Construction
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `construction_site` | - | Construction sites |
-
-#### Food & Beverage Production
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `winery` | - | Wineries |
-| `bakery` | - | Bakeries |
-| `dairy` | - | Dairies |
-
-#### Food Services
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `restaurant` | - | Restaurants |
-| `cafe` | - | Cafes |
-| `fast_food` | - | Fast food restaurants |
-
-#### Recreation
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `playground` | - | Playgrounds |
-| `park` | - | Parks |
-| `pitch` | - | Sports pitches |
-
-#### Water Features
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `fountain` | - | Fountains |
-| `waterfall` | - | Waterfalls |
-| `hot_spring` | - | Hot springs |
-
-#### Monitoring & Weather
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `monitoring_station` | - | Environmental monitoring |
-| `weather_station` | - | Weather stations |
-
-#### Community Facilities
-| Type | Aliases | Description |
-|------|---------|-------------|
-| `community_centre` | - | Community centres |
-| `social_facility` | - | Social facilities |
-| `shelter` | - | Public shelters |
-
-## Development
-
-### Prerequisites
-
-- Node.js 18+
+- Node.js 20+ recommended
 - npm
 
-### Setup
+### Install
 
 ```bash
 npm install
+```
+
+### Development
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Then open:
 
-### Project Structure
-
-```
-app/
-├── page.tsx              # Main application page
-├── layout.tsx            # Root layout
-├── globals.css           # Global styles
-└── api/
-    └── search/
-        └── route.ts      # Search API endpoint
-
-components/
-├── SearchBar.tsx         # Query input
-├── Filters.tsx           # Filter sidebar
-├── ResultList.tsx        # Results display
-├── MapView.tsx           # Leaflet map
-├── ShareButton.tsx       # Share functionality
-└── ui/
-    └── scroll-area.tsx   # UI components
-
-lib/
-├── types.ts              # Type definitions
-├── parser.ts             # Query parsing and NLP
-├── geo.ts                # Nominatim integration
-├── overpass.ts           # Overpass API queries
-├── cache.ts              # In-memory caching
-├── search-index.ts       # Search indexing
+```text
+http://localhost:3000
 ```
 
-## Deployment
-
-### Vercel
+### Lint
 
 ```bash
-npm install -g vercel
-vercel
+npm run lint
 ```
 
-### Environment Variables
+### Type check
 
-No environment variables required. The application uses public OpenStreetMap APIs.
+```bash
+npx tsc --noEmit
+```
 
-### API Rate Limits
+### Production build
 
-- Nominatim: 1 request/second (enforced by Nominatim usage policy)
-- Overpass API: Fair use, avoid heavy queries
+```bash
+npm run build
+```
 
-## Responsible Use
+Note: in sandboxed environments, `next build` may fail because Turbopack attempts to create a process or bind to a port. In a normal local environment, build should be run outside that restriction.
 
-This tool accesses publicly available OpenStreetMap data. Users must:
+## How the Frontend Works
 
-1. Respect [OpenStreetMap's tile usage policy](https://operations.osmfoundation.org/policies/tiles/)
-2. Respect [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/)
-3. Respect [Overpass API usage policy](https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances)
-4. Not use this tool for illegal surveillance or harmful purposes
-5. Acknowledge that OSM data may be incomplete or inaccurate
-6. Not perform bulk automated queries that overload public infrastructure
-7. For issues regarding the map, please refer to [https://www.openstreetmap.org/fixthemap](https://www.openstreetmap.org/fixthemap)
+### 1. Create Sections
 
-The presence or absence of infrastructure in OSM should not be taken as authoritative. Always verify critical information through official sources.
+Users draw AOIs on the map. Each drawing becomes a Section and appears in the left panel.
+
+### 2. Configure per-section filters
+
+Selecting a Section reveals its own `Data Sources` checkboxes. These filters do not affect any other Section.
+
+### 3. Fetch intelligence
+
+The selected Section is posted to `/api/intel`. The frontend:
+
+1. receives GeoJSON or overlay-like intel data
+2. normalizes feature properties
+3. clips the result to the selected AOI
+4. stores the result in the selected Section’s in-memory state
+5. pushes the data into MapLibre immediately
+
+### 4. Review output
+
+The selected Section’s overlays are rendered on the map, and the right inspector shows:
+
+- notes
+- metadata
+- fetch status
+- fetched timestamp
+- grouped intelligence counts
+
+## Current API Contracts
+
+### `/api/intel`
+
+Expected frontend request:
+
+```json
+{
+  "aoiId": "aoi-123",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[24.8, 60.1], [25.1, 60.1], [25.1, 60.3], [24.8, 60.3], [24.8, 60.1]]]
+  },
+  "bbox": [24.8, 60.1, 25.1, 60.3],
+  "filters": ["weather", "terrain", "bridges"]
+}
+```
+
+Current frontend accepts either:
+
+- a raw GeoJSON `FeatureCollection`
+- or the repository’s aggregated overlay response shape from `/api/intel`
+
+### `/api/aoi/search`
+
+Expected request:
+
+```json
+{
+  "aoiId": "aoi-123",
+  "query": "museums",
+  "bbox": [24.8, 60.1, 25.1, 60.3],
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [[[24.8, 60.1], [25.1, 60.1], [25.1, 60.3], [24.8, 60.3], [24.8, 60.1]]]
+  }
+}
+```
+
+## Persistence and State Rules
+
+### Persisted
+
+- Section geometry and metadata
+- Section notes
+- selected filters
+- timestamps
+
+### Runtime only
+
+- fetched intelligence
+- loading / error fetch state
+- current map overlays
+- weather overlay results
+- selection-focused UI state
+
+This split is deliberate. It keeps the app resilient, small in storage, and safe from `QuotaExceededError`.
+
+## Known Constraints
+
+- Intelligence rendering is Section-scoped by default; only the selected Section’s intelligence is shown.
+- Some backend routes still depend on external provider quality and upstream coverage.
+- The project currently favors runtime normalization and defensive filtering over strict provider-specific schemas in the frontend.
+- There are legacy files in the repository from earlier UI generations; the active map workspace is centered around `OperationalMap`, `LeftPanel`, `RightInspector`, and `useAoiManager`.
+
+## Suggested Reading Order
+
+If you are onboarding to the codebase, start here:
+
+1. [app/page.tsx](app/page.tsx)
+2. [hooks/useAoiManager.ts](hooks/useAoiManager.ts)
+3. [components/map/OperationalMap.tsx](components/map/OperationalMap.tsx)
+4. [app/api/intel/route.ts](app/api/intel/route.ts)
+5. [API.md](API.md)
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

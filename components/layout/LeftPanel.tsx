@@ -30,6 +30,7 @@ interface LeftPanelProps {
   selectedAoiId: string | null;
   selectedAoi: AoiSelection | null;
   onSelectAoi: (id: string) => void;
+  onDeleteAoi: (id: string) => void;
   onToggleFilter: (id: string, filter: AoiDataFilter) => void;
   onFetchIntelligence: () => void;
   intelState: AoiIntelState | null;
@@ -46,6 +47,7 @@ export default function LeftPanel({
   selectedAoiId,
   selectedAoi,
   onSelectAoi,
+  onDeleteAoi,
   onToggleFilter,
   onFetchIntelligence,
   intelState,
@@ -91,28 +93,47 @@ export default function LeftPanel({
             </div>
           ) : (
             aois.map((aoi) => (
-              <button
+              <div
                 key={aoi.id}
-                type="button"
-                onClick={() => onSelectAoi(aoi.id)}
-                className={`w-full rounded-xl border px-4 py-3 text-left shadow-sm transition ${
+                className={`rounded-xl border px-4 py-3 shadow-sm transition ${
                   aoi.id === selectedAoiId
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <button
+                    type="button"
+                    onClick={() => onSelectAoi(aoi.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
                     <div className="font-medium">{aoi.name}</div>
                     <div className={`mt-1 text-xs ${aoi.id === selectedAoiId ? "text-slate-300" : "text-slate-500"}`}>
                       {SHAPE_LABELS[aoi.shapeType]} · {aoi.areaSqKm ? `${aoi.areaSqKm.toFixed(1)} km²` : "Area n/a"} · {aoi.selectedFilters.length} sources
                     </div>
-                  </div>
-                  <div className={`text-[11px] ${aoi.id === selectedAoiId ? "text-slate-400" : "text-slate-400"}`}>
-                    {new Date(aoi.createdAt).toLocaleDateString()}
+                  </button>
+                  <div className="flex items-start gap-3">
+                    <div className={`pt-0.5 text-[11px] ${aoi.id === selectedAoiId ? "text-slate-400" : "text-slate-400"}`}>
+                      {new Date(aoi.createdAt).toLocaleDateString()}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm("Delete this section?")) {
+                          onDeleteAoi(aoi.id);
+                        }
+                      }}
+                      className={`rounded-md border px-2 py-1 text-[11px] font-medium transition ${
+                        aoi.id === selectedAoiId
+                          ? "border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                          : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                      }`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>

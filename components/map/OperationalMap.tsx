@@ -48,6 +48,7 @@ interface OperationalMapProps {
   onReplaceAoiGeometry: (id: string, geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon) => void;
   onSelectAoi: (id: string | null) => void;
   zoomToSelectedAoiToken?: number;
+  fitToSelectedAoiToken?: number;
 }
 
 interface ResultFeatureProperties {
@@ -213,25 +214,25 @@ function createIntelPopupHtml(properties: SectionIntelFeatureProperties): string
     typeof properties.source === "string" ? properties.source : "Unknown source",
   );
   const safeCategory = escapeHtml(
-    typeof properties.category === "string" ? properties.category : "unknown",
+    typeof properties.category === "string" ? properties.category : "Unknown category",
   );
-  const rows = Object.entries(properties)
-    .filter(([key]) => !["name", "source", "category", "sectionId"].includes(key))
-    .slice(0, 6)
-    .map(
-      ([key, value]) =>
-        `<tr><td class="popup-key">${escapeHtml(key)}</td><td class="popup-value">${escapeHtml(
-          typeof value === "string" ? value : JSON.stringify(value),
-        )}</td></tr>`,
-    )
-    .join("");
+  const safeConfidence =
+    typeof properties.confidence === "number" ? properties.confidence.toFixed(2) : "Unknown";
+  const safeTimestamp =
+    typeof properties.timestamp === "string" ? escapeHtml(properties.timestamp) : "Unknown";
+  const safeDescription =
+    typeof properties.description === "string" ? escapeHtml(properties.description) : "No description available";
 
   return `
     <div class="map-popup">
       <div class="popup-title">${safeName}</div>
       <div class="popup-type">${safeCategory}</div>
       <div class="popup-operator">${safeSource}</div>
-      ${rows ? `<table class="popup-tags">${rows}</table>` : ""}
+      <table class="popup-tags">
+        <tr><td class="popup-key">Confidence</td><td class="popup-value">${safeConfidence}</td></tr>
+        <tr><td class="popup-key">Timestamp</td><td class="popup-value">${safeTimestamp}</td></tr>
+        <tr><td class="popup-key">Description</td><td class="popup-value">${safeDescription}</td></tr>
+      </table>
     </div>
   `;
 }
@@ -538,6 +539,7 @@ export default function OperationalMap({
   onReplaceAoiGeometry,
   onSelectAoi,
   zoomToSelectedAoiToken = 0,
+  fitToSelectedAoiToken = 0,
 }: OperationalMapProps) {
   const [modalAsset, setModalAsset] = useState<Asset | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1222,11 +1224,11 @@ export default function OperationalMap({
     }
 
     map.fitBounds(aoiBoundsToMapLibre(selectedAoi), {
-      padding: 72,
-      duration: 650,
-      maxZoom: 12,
+      padding: 88,
+      duration: 700,
+      maxZoom: 13,
     });
-  }, [selectedAoi]);
+  }, [selectedAoi, fitToSelectedAoiToken]);
 
   useEffect(() => {
     const map = mapRef.current;

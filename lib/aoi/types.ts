@@ -32,6 +32,7 @@ export interface SectionIntelFeatureProperties {
   category?: string;
   source?: string;
   name?: string;
+  description?: string;
   confidence?: number;
   timestamp?: string;
   [key: string]: unknown;

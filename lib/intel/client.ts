@@ -3,6 +3,8 @@ import type {
   SectionIntelFeatureCollection,
   SectionIntelFeatureProperties,
 } from "@/lib/aoi/types";
+import { filterFeaturesToAoi } from "@/lib/geo/filterFeaturesToAoi";
+import { normalizeIntelFeatureProperties } from "@/lib/intel/normalizeFeatureProperties";
 import type { SectionIntelResponse } from "@/lib/aoi/sectionIntel";
 
 function emptyFeatureCollection(): SectionIntelFeatureCollection {
@@ -27,15 +29,7 @@ function normalizeFeatureProperties(
   properties: Record<string, unknown> | null | undefined,
   sectionId: string,
 ): SectionIntelFeatureProperties {
-  return {
-    sectionId,
-    category: typeof properties?.category === "string" ? properties.category : "unknown",
-    source: typeof properties?.source === "string" ? properties.source : "unknown",
-    name: typeof properties?.name === "string" ? properties.name : "Unnamed feature",
-    confidence: typeof properties?.confidence === "number" ? properties.confidence : undefined,
-    timestamp: typeof properties?.timestamp === "string" ? properties.timestamp : undefined,
-    ...(properties ?? {}),
-  };
+  return normalizeIntelFeatureProperties(properties, sectionId);
 }
 
 function normalizeFeatureCollection(
@@ -111,11 +105,11 @@ export async function fetchSectionIntel(
   }
 
   if (isFeatureCollection(data)) {
-    return normalizeFeatureCollection(data, section.id);
+    return filterFeaturesToAoi(normalizeFeatureCollection(data, section.id), section.geometry);
   }
 
   if (typeof data === "object" && data && "overlays" in data) {
-    return normalizeSectionIntelResponse(data as SectionIntelResponse);
+    return filterFeaturesToAoi(normalizeSectionIntelResponse(data as SectionIntelResponse), section.geometry);
   }
 
   return emptyFeatureCollection();
