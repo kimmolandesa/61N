@@ -70,10 +70,10 @@ async def get_soil(
     Max bbox ~2° × 2°. Cached 7 days. Returns 503 if GTK WFS is unreachable.
     """
     west, south, east, north = _bbox(bbox)
-    if (east - west) > 3.0 or (north - south) > 2.0:
+    if (east - west) > 0.5 or (north - south) > 0.5:
         raise HTTPException(
             status_code=400,
-            detail="bbox too large — max ~200×200 km (3° lon × 2° lat)",
+            detail="bbox too large — max 0.5° × 0.5° (~35×55 km)",
         )
     try:
         return await soil_svc.get_soil((west, south, east, north))

@@ -4,14 +4,13 @@ Layer: maapera_200k_maalajit (1:200 000 soil type polygons)
 WFS 1.1.0, GML3 output, coordinates returned as lat lon pairs → swapped to lon lat for GeoJSON.
 """
 
+import asyncio
 import hashlib
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import httpx
-
-from core.config import settings
 
 GTK_WFS = (
     "https://gtkdata.gtk.fi/arcgis/services/Rajapinnat/"
@@ -285,6 +284,13 @@ async def get_soil(bbox: tuple[float, float, float, float]) -> dict:
     except Exception as exc:
         raise RuntimeError(f"upstream_unavailable: {exc}") from exc
 
+    # XML parse + feature processing is CPU-bound — run off the event loop
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, _parse_and_build, raw_xml, bbox, cache_path)
+    return result
+
+
+def _parse_and_build(raw_xml: str, bbox: tuple, cache_path: Path) -> dict:
     try:
         root = ET.fromstring(raw_xml)
     except ET.ParseError as exc:
