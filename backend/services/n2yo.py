@@ -43,7 +43,7 @@ def _fmt_pass(p: dict, sat_meta: dict, norad_id: int) -> dict:
         'end_utc':    datetime.fromtimestamp(p['endUTC'],   tz=timezone.utc).isoformat(),
         'max_elevation_deg': round(p['maxEl'], 1),
         'start_azimuth':     p.get('startAzCompass', ''),
-        'duration_s':        p.get('duration', 0),
+        'duration_s':        p['endUTC'] - p['startUTC'],
         # High elevation = near-zenith pass = high-quality imagery, minimal oblique distortion
         'quality': 'high' if p['maxEl'] > 60 else 'medium' if p['maxEl'] > 30 else 'low',
     }
