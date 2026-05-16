@@ -4,9 +4,19 @@ export type AoiShapeType =
   | "circle"
   | "freehand";
 
+export type AoiDrawMode =
+  | "select"
+  | "polygon"
+  | "rectangle"
+  | "circle"
+  | "freehand"
+  | "measure"
+  | "edit";
+
 export type AoiDataFilter =
   | "terrain"
   | "weather"
+  | "infrastructure"
   | "roads"
   | "bridges"
   | "population"
@@ -16,6 +26,13 @@ export type AoiDataFilter =
   | "power"
   | "water"
   | "logistics";
+
+export interface AoiIntelState {
+  status: "idle" | "loading" | "success" | "error";
+  message: string | null;
+  result?: unknown;
+  lastFetchedAt?: string;
+}
 
 export interface AoiComment {
   id: string;

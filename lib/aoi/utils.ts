@@ -9,6 +9,7 @@ import type {
 export const DEFAULT_AOI_FILTERS: AoiDataFilter[] = [
   "terrain",
   "weather",
+  "infrastructure",
   "roads",
   "bridges",
   "population",

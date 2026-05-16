@@ -1,0 +1,139 @@
+"use client";
+
+import type { ReactNode } from "react";
+import SearchBar from "@/components/SearchBar";
+import AoiToolbar from "@/components/aoi/AoiToolbar";
+import type { AoiDrawMode } from "@/lib/aoi/types";
+import type { BaseMapId, BaseMapConfig } from "@/lib/map/baseMaps";
+
+interface TopToolbarProps {
+  projectName: string;
+  activeDrawMode: AoiDrawMode;
+  activeBaseMap: BaseMapId;
+  baseMaps: BaseMapConfig[];
+  onSetDrawMode: (mode: AoiDrawMode) => void;
+  onSetBaseMap: (id: BaseMapId) => void;
+  onNew: () => void;
+  onOpen: () => void;
+  onSave: () => void;
+  onExport: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onClearSelection: () => void;
+  onFetchIntelligence: () => void;
+  onRefreshData: () => void;
+  onGenerateSummary: () => void;
+  onZoomToAoi: () => void;
+  onToggleSatellite: () => void;
+  onToggleTerrain: () => void;
+  onToggleRiskOverlays: () => void;
+  onSearch: (query: string) => void;
+  loading: boolean;
+  initialQuery: string;
+}
+
+function ToolbarGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        {title}
+      </span>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function TopToolbar(props: TopToolbarProps) {
+  return (
+    <header className="border-b border-slate-200 bg-[#f7f8fb] px-4 py-3">
+      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+            Workspace
+          </div>
+          <div className="text-2xl font-semibold text-slate-900">{props.projectName}</div>
+        </div>
+        <div className="w-full max-w-xl">
+          <SearchBar
+            onSearch={props.onSearch}
+            loading={props.loading}
+            initialQuery={props.initialQuery}
+            placeholder="Search location, coordinate, or feature..."
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <ToolbarGroup title="File">
+          <ToolbarButton label="New" onClick={props.onNew} />
+          <ToolbarButton label="Open" onClick={props.onOpen} />
+          <ToolbarButton label="Save" onClick={props.onSave} />
+          <ToolbarButton label="Export" onClick={props.onExport} />
+        </ToolbarGroup>
+        <ToolbarGroup title="Edit">
+          <ToolbarButton label="Undo" onClick={props.onUndo} />
+          <ToolbarButton label="Redo" onClick={props.onRedo} />
+          <ToolbarButton label="Clear selection" onClick={props.onClearSelection} />
+        </ToolbarGroup>
+        <ToolbarGroup title="Map">
+          <AoiToolbar
+            activeDrawMode={props.activeDrawMode}
+            onSetDrawMode={props.onSetDrawMode}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {props.baseMaps.map((baseMap) => (
+              <button
+                key={baseMap.id}
+                type="button"
+                onClick={() => props.onSetBaseMap(baseMap.id)}
+                disabled={baseMap.available === false}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium transition ${
+                  props.activeBaseMap === baseMap.id
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                } ${baseMap.available === false ? "cursor-not-allowed opacity-50" : ""}`}
+                title={baseMap.description}
+              >
+                {baseMap.label}
+              </button>
+            ))}
+          </div>
+        </ToolbarGroup>
+        <ToolbarGroup title="Data">
+          <ToolbarButton label="Fetch intelligence" onClick={props.onFetchIntelligence} />
+          <ToolbarButton label="Refresh data" onClick={props.onRefreshData} />
+          <ToolbarButton label="Generate summary" onClick={props.onGenerateSummary} />
+        </ToolbarGroup>
+        <ToolbarGroup title="View">
+          <ToolbarButton label="Zoom to AOI" onClick={props.onZoomToAoi} />
+          <ToolbarButton label="Toggle satellite" onClick={props.onToggleSatellite} />
+          <ToolbarButton label="Toggle terrain" onClick={props.onToggleTerrain} />
+          <ToolbarButton label="Toggle risk overlays" onClick={props.onToggleRiskOverlays} />
+        </ToolbarGroup>
+      </div>
+    </header>
+  );
+}

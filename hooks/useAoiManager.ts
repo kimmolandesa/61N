@@ -10,6 +10,8 @@ import {
 import type {
   AoiComment,
   AoiDataFilter,
+  AoiDrawMode,
+  AoiIntelState,
   AoiSelection,
   AoiShapeType,
 } from "@/lib/aoi/types";
@@ -20,6 +22,8 @@ export function useAoiManager() {
     const stored = readStoredAoiSelections();
     return stored[0]?.id ?? null;
   });
+  const [activeDrawMode, setActiveDrawMode] = useState<AoiDrawMode>("select");
+  const [intelStateByAoiId, setIntelStateByAoiId] = useState<Record<string, AoiIntelState>>({});
   const storageReadyRef = useRef(true);
 
   useEffect(() => {
@@ -37,6 +41,11 @@ export function useAoiManager() {
 
   const selectAoi = useCallback((id: string | null) => {
     setSelectedAoiId(id);
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedAoiId(null);
+    setActiveDrawMode("select");
   }, []);
 
   const addAoiFromGeometry = useCallback((args: {
@@ -109,11 +118,39 @@ export function useAoiManager() {
       );
       return next;
     });
+    setIntelStateByAoiId((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }, []);
 
   const clearAllAois = useCallback(() => {
     setAois([]);
     setSelectedAoiId(null);
+    setActiveDrawMode("select");
+    setIntelStateByAoiId({});
+  }, []);
+
+  const replaceAois = useCallback((nextAois: AoiSelection[]) => {
+    setAois(nextAois);
+    setSelectedAoiId(nextAois[0]?.id ?? null);
+    setIntelStateByAoiId((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([aoiId]) => nextAois.some((aoi) => aoi.id === aoiId)),
+      ),
+    );
+  }, []);
+
+  const saveToStorage = useCallback(() => {
+    writeStoredAoiSelections(aois);
+  }, [aois]);
+
+  const loadFromStorage = useCallback(() => {
+    const stored = readStoredAoiSelections();
+    setAois(stored);
+    setSelectedAoiId(stored[0]?.id ?? null);
+    setActiveDrawMode("select");
   }, []);
 
   const addComment = useCallback((id: string, text: string) => {
@@ -161,17 +198,41 @@ export function useAoiManager() {
     );
   }, []);
 
+  const setAoiIntelState = useCallback((id: string, state: AoiIntelState) => {
+    setIntelStateByAoiId((current) => ({
+      ...current,
+      [id]: state,
+    }));
+  }, []);
+
+  const clearAoiIntelState = useCallback((id: string) => {
+    setIntelStateByAoiId((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
   return {
     aois,
     selectedAoiId,
     selectedAoi,
+    activeDrawMode,
+    intelStateByAoiId,
     addAoiFromGeometry,
     updateAoi,
     replaceAoiGeometry,
     deleteAoi,
     selectAoi,
+    clearSelection,
     clearAllAois,
+    replaceAois,
     addComment,
     toggleFilter,
+    setAoiIntelState,
+    clearAoiIntelState,
+    saveToStorage,
+    loadFromStorage,
+    setActiveDrawMode,
   };
 }

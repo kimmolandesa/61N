@@ -17,6 +17,7 @@ interface SearchBarProps {
   onSearch: (query: string) => void;
   loading: boolean;
   initialQuery?: string;
+  placeholder?: string;
 }
 
 interface Suggestion {
@@ -34,6 +35,7 @@ export default function SearchBar({
   onSearch,
   loading,
   initialQuery = "",
+  placeholder = "Search infrastructure...",
 }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [showExamples, setShowExamples] = useState(false);
@@ -442,7 +444,7 @@ export default function SearchBar({
             onChange={handleInputChange}
             onFocus={() => !query && setShowExamples(true)}
             onKeyDown={handleKeyDown}
-            placeholder="Search infrastructure..."
+            placeholder={placeholder}
             className="search-input"
             disabled={loading}
             autoComplete="off"
