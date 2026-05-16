@@ -563,6 +563,9 @@ export default function OperationalMap({
   const intelGeoJsonRef = useRef<GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>>(
     emptyFeatureCollection() as GeoJSON.FeatureCollection<IntelGeometry, IntelMapFeatureProperties>,
   );
+  const resultsGeoJsonRef = useRef<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(
+    emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>,
+  );
 
   useEffect(() => {
     resultsRef.current = results;
@@ -774,6 +777,10 @@ export default function OperationalMap({
     intelGeoJsonRef.current = intelGeoJson;
   }, [intelGeoJson]);
 
+  useEffect(() => {
+    resultsGeoJsonRef.current = resultsGeoJson;
+  }, [resultsGeoJson]);
+
   const closePopup = useCallback(() => {
     popupRef.current?.remove();
     popupRef.current = null;
@@ -818,7 +825,7 @@ export default function OperationalMap({
 
     const syncSources = () => {
       ensureSourcesAndLayers(map);
-      asGeoJSONSource(map, RESULTS_SOURCE_ID)?.setData(resultsGeoJson);
+      asGeoJSONSource(map, RESULTS_SOURCE_ID)?.setData(resultsGeoJsonRef.current);
       asGeoJSONSource(map, WEATHER_SOURCE_ID)?.setData(weatherGeoJsonRef.current);
       asGeoJSONSource(map, AOI_SOURCE_ID)?.setData(aoiGeoJsonRef.current);
       asGeoJSONSource(map, AREA_SEARCH_SOURCE_ID)?.setData(areaSearchGeoJsonRef.current);
@@ -1047,15 +1054,14 @@ export default function OperationalMap({
       map.remove();
       mapRef.current = null;
     };
+  // resultsGeoJson intentionally omitted — live updates handled by the dedicated setData effect below
   }, [
-    activeBasemap,
     closePopup,
     onAddAoiFromGeometry,
     onReplaceAoiGeometry,
     onSelect,
     onSelectAoi,
     openPopupHtml,
-    resultsGeoJson,
   ]);
 
   useEffect(() => {
@@ -1234,8 +1240,22 @@ export default function OperationalMap({
       return;
     }
 
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+    const bearing = map.getBearing();
+    const pitch = map.getPitch();
+
     closePopup();
     map.setStyle(BASE_MAPS_BY_ID[activeBasemap].style);
+
+    const restoreCamera = () => {
+      map.jumpTo({ center, zoom, bearing, pitch });
+    };
+    map.once("style.load", restoreCamera);
+
+    return () => {
+      map.off("style.load", restoreCamera);
+    };
   }, [activeBasemap, closePopup]);
 
   useEffect(() => {
