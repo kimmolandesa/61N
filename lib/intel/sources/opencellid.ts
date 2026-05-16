@@ -10,7 +10,7 @@ export const opencellidSourceAdapter: IntelSourceAdapter = {
   category: 'telecom',
   async fetch(params: IntelFetchParams): Promise<IntelFeature[]> {
     const data = await getCellsInArea({
-      bbox: [params.bbox[1], params.bbox[0], params.bbox[3], params.bbox[2]],
+      bbox: [params.bbox[0], params.bbox[1], params.bbox[2], params.bbox[3]],
       limit: 250,
     });
 

@@ -14,6 +14,7 @@ export const DEFAULT_AOI_FILTERS: AoiDataFilter[] = [
   "bridges",
   "population",
   "infrastructure",
+  "telecom",
 ];
 
 function isFiniteNumber(value: unknown): value is number {

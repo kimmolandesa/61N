@@ -69,7 +69,7 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
     limit = 1000
     params = {
         'key':    settings.OPENCELLID_API_KEY,
-        'BBOX':   f"{south},{west},{north},{east}",
+        'BBOX':   f"{west},{south},{east},{north}",
         'format': 'json',
         'limit':  limit,
     }
