@@ -18,6 +18,14 @@ function buildRasterStyle(args: {
   attribution: string;
   tileSize?: number;
   maxzoom?: number;
+  overlays?: Array<{
+    id: string;
+    tiles: string[];
+    attribution?: string;
+    tileSize?: number;
+    maxzoom?: number;
+    opacity?: number;
+  }>;
 }): StyleSpecification {
   return {
     version: 8,
@@ -31,6 +39,20 @@ function buildRasterStyle(args: {
         attribution: args.attribution,
         maxzoom: args.maxzoom ?? 19,
       },
+      ...(args.overlays
+        ? Object.fromEntries(
+            args.overlays.map((overlay) => [
+              overlay.id,
+              {
+                type: "raster",
+                tiles: overlay.tiles,
+                tileSize: overlay.tileSize ?? 256,
+                attribution: overlay.attribution ?? args.attribution,
+                maxzoom: overlay.maxzoom ?? args.maxzoom ?? 19,
+              },
+            ]),
+          )
+        : {}),
     },
     layers: [
       {
@@ -45,6 +67,14 @@ function buildRasterStyle(args: {
         type: "raster",
         source: "basemap",
       },
+      ...((args.overlays ?? []).map((overlay) => ({
+        id: `${overlay.id}-layer`,
+        type: "raster" as const,
+        source: overlay.id,
+        paint: {
+          "raster-opacity": overlay.opacity ?? 0.35,
+        },
+      }))),
     ],
   };
 }
@@ -66,6 +96,15 @@ export const BASE_MAPS: BaseMapConfig[] = [
       attribution:
         '&copy; OpenTopoMap (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
       maxzoom: 17,
+      overlays: [
+        {
+          id: "hillshade",
+          tiles: ["https://api.kebabkartta.fi/api/terrain/dem/{z}/{x}/{y}.png"],
+          attribution: "&copy; kebabkartta.fi terrain DEM hillshade",
+          maxzoom: 18,
+          opacity: 0.32,
+        },
+      ],
     }),
   },
   {

@@ -3,13 +3,13 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sightline",
+  title: "D-Director",
   description: "An OSINT search engine for mapping real-world infrastructure from OpenStreetMap data.",
   robots: "index, follow",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Sightline"
+    title: "D-Director"
   }
 };
 

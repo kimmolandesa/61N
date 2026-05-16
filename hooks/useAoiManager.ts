@@ -14,6 +14,7 @@ import type {
   AoiSelection,
   AoiShapeType,
   SectionIntelFeatureCollection,
+  SectionIntelSummary,
 } from "@/lib/aoi/types";
 
 export function useAoiManager() {
@@ -218,7 +219,11 @@ export function useAoiManager() {
     );
   }, []);
 
-  const setSectionIntelSuccess = useCallback((id: string, featureCollection: SectionIntelFeatureCollection) => {
+  const setSectionIntelSuccess = useCallback((
+    id: string,
+    featureCollection: SectionIntelFeatureCollection,
+    summary?: SectionIntelSummary,
+  ) => {
     setAois((current) =>
       current.map((aoi) =>
         aoi.id === id
@@ -228,6 +233,7 @@ export function useAoiManager() {
                 status: "success",
                 fetchedAt: new Date().toISOString(),
                 featureCollection,
+                summary,
               },
               updatedAt: new Date().toISOString(),
             }
@@ -246,6 +252,7 @@ export function useAoiManager() {
                 status: "error",
                 error,
                 featureCollection: aoi.intel.featureCollection,
+                summary: aoi.intel.summary,
               },
               updatedAt: new Date().toISOString(),
             }
