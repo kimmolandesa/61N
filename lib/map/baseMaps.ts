@@ -1,6 +1,6 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-export type BaseMapId = "streets" | "terrain" | "satellite" | "mml" | "dark";
+export type BaseMapId = "terrain" | "satellite" | "mml" | "dark";
 
 export interface BaseMapConfig {
   id: BaseMapId;
@@ -80,12 +80,6 @@ function buildRasterStyle(args: {
 }
 
 export const BASE_MAPS: BaseMapConfig[] = [
-  {
-    id: "streets",
-    label: "Streets",
-    description: "Standard vector basemap",
-    style: "https://demotiles.maplibre.org/style.json",
-  },
   {
     id: "terrain",
     label: "Terrain",

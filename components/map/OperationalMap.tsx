@@ -549,6 +549,7 @@ export default function OperationalMap({
   const initialBasemapRef = useRef(activeBasemap);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const drawRef = useRef<TerraDraw | null>(null);
+  const lastAppliedBasemap = useRef<BaseMapId>(activeBasemap);
   const resultsRef = useRef<Asset[]>(results);
   const areaSearchResultsRef = useRef<Asset[]>(areaSearchResults);
   const selectedIdRef = useRef<string | null>(selectedId);
@@ -889,7 +890,7 @@ export default function OperationalMap({
     };
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
-      if (drawModeRef.current !== "select") {
+      if (drawModeRef.current !== "select" || !map.isStyleLoaded()) {
         return;
       }
 
@@ -997,6 +998,10 @@ export default function OperationalMap({
     };
 
     const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
+      if (!map.isStyleLoaded()) {
+        return;
+      }
+
       const isInteractive =
         map.queryRenderedFeatures(event.point, {
           layers: [
@@ -1099,12 +1104,34 @@ export default function OperationalMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) {
+    if (!map) {
       return;
     }
 
-    ensureSourcesAndLayers(map);
-    asGeoJSONSource(map, INTEL_SOURCE_ID)?.setData(intelGeoJson);
+    // Probe source presence directly instead of isStyleLoaded().
+    // isStyleLoaded() is transiently false during basemap swaps and can
+    // silently drop updates that arrive while frames are being processed.
+    // If the source already exists we can write to it immediately and
+    // then force a WebGL frame so the layer renders without waiting for
+    // the next camera event to kick the render loop.
+    const source = asGeoJSONSource(map, INTEL_SOURCE_ID);
+    if (source) {
+      source.setData(intelGeoJson);
+      map.triggerRepaint();
+      return;
+    }
+
+    // Source not yet created — style is still loading. Apply data once the
+    // style is ready and the source has been added by ensureSourcesAndLayers.
+    const applyWhenReady = () => {
+      ensureSourcesAndLayers(map);
+      asGeoJSONSource(map, INTEL_SOURCE_ID)?.setData(intelGeoJson);
+      map.triggerRepaint();
+    };
+    map.once("style.load", applyWhenReady);
+    return () => {
+      map.off("style.load", applyWhenReady);
+    };
   }, [intelGeoJson]);
 
   useEffect(() => {
@@ -1238,10 +1265,21 @@ export default function OperationalMap({
   }, [selectedAoi, fitToSelectedAoiToken]);
 
   useEffect(() => {
+    // Only call setStyle() when the basemap actually changes. Comparing against
+    // lastAppliedBasemap (initialized to the prop's initial value) skips the
+    // redundant initial call — React Strict Mode's double-invocation would
+    // otherwise trigger setStyle() with the same URL the map was created with,
+    // making isStyleLoaded() false and breaking subsequent source updates.
+    if (lastAppliedBasemap.current === activeBasemap) {
+      return;
+    }
+
     const map = mapRef.current;
     if (!map) {
       return;
     }
+
+    lastAppliedBasemap.current = activeBasemap;
 
     const center = map.getCenter();
     const zoom = map.getZoom();

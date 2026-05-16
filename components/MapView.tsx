@@ -27,7 +27,7 @@ export default function MapView(props: MapViewProps) {
     replaceAoiGeometry,
     selectAoi,
   } = useAoiManager();
-  const [activeBasemap] = useState<BaseMapId>("streets");
+  const [activeBasemap] = useState<BaseMapId>("mml");
 
   return (
     <OperationalMap

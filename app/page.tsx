@@ -68,7 +68,7 @@ function HomeContent() {
   const [filterType] = useState<string | null>(null);
   const [weatherFeatures, setWeatherFeatures] = useState<IntelFeature[]>([]);
   const [weatherBounds, setWeatherBounds] = useState<[number, number, number, number] | null>(null);
-  const [activeBasemap, setActiveBasemap] = useState<BaseMapId>("streets");
+  const [activeBasemap, setActiveBasemap] = useState<BaseMapId>("mml");
   const [riskOverlayEnabled, setRiskOverlayEnabled] = useState(false);
   const [toolbarMessage, setToolbarMessage] = useState<string | null>(null);
   const [zoomToSelectedAoiToken, setZoomToSelectedAoiToken] = useState(0);
@@ -318,11 +318,11 @@ function HomeContent() {
   }, []);
 
   const handleToggleSatellite = useCallback(() => {
-    setActiveBasemap((current) => (current === "satellite" ? "streets" : "satellite"));
+    setActiveBasemap((current) => (current === "satellite" ? "mml" : "satellite"));
   }, []);
 
   const handleToggleTerrain = useCallback(() => {
-    setActiveBasemap((current) => (current === "terrain" ? "streets" : "terrain"));
+    setActiveBasemap((current) => (current === "terrain" ? "mml" : "terrain"));
   }, []);
 
   const handleZoomToAoi = useCallback(() => {
