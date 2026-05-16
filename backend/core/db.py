@@ -3,6 +3,7 @@ from .config import settings
 
 pool = None
 
+
 async def get_pool():
     global pool
     if pool is None:
@@ -13,6 +14,13 @@ async def get_pool():
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
             min_size=2,
-            max_size=10
+            max_size=10,
         )
     return pool
+
+
+async def close_pool():
+    global pool
+    if pool:
+        await pool.close()
+        pool = None

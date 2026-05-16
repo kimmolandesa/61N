@@ -62,28 +62,15 @@ async def get_soil(
     bbox: Annotated[str, Query(description="minx,miny,maxx,maxy (WGS84)")],
 ):
     """
-    Superficial deposit polygons from GTK Maapera WFS 1:200 000 for the bbox.
+    Superficial deposit polygons from GTK Maapera 1:200 000 (local PostGIS).
     Deposit types: bedrock, till, glaciofluvial_gravel, sand, clay, fine_grained,
     peat (thin/thick), swamp, water.
     Tactical fields per polygon: deposit_type, peat_depth, digging_suitability,
     trafficability_dry, trafficability_wet, concealment_potential, groundwater_risk.
-    Max bbox ~2° × 2°. Cached 7 days. Returns 503 if GTK WFS is unreachable.
+    Cached 1 hour. Requires gtk_soil table (run scripts/ingest_soil.py once).
     """
     west, south, east, north = _bbox(bbox)
-    if (east - west) > 0.5 or (north - south) > 0.5:
-        raise HTTPException(
-            status_code=400,
-            detail="bbox too large — max 0.5° × 0.5° (~35×55 km)",
-        )
-    try:
-        return await soil_svc.get_soil((west, south, east, north))
-    except RuntimeError as exc:
-        if "upstream_unavailable" in str(exc):
-            raise HTTPException(
-                status_code=503,
-                detail={"error": "upstream_unavailable", "source": "GTK"},
-            )
-        raise
+    return await soil_svc.get_soil((west, south, east, north))
 
 
 @router.get("/dem/{z}/{x}/{y}.png")

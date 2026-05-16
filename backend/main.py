@@ -1,5 +1,9 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from core.db import get_pool, close_pool
 from routes.features import router as features_router
 from routes.tiles import router as tiles_router
 from routes.analysis import router as analysis_router
@@ -8,7 +12,15 @@ from routes.terrain import router as terrain_router
 from routes.weather import router as weather_router
 from routes.intel import router as intel_router
 
-app = FastAPI(title="n61 API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await get_pool()
+    yield
+    await close_pool()
+
+
+app = FastAPI(title="n61 API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
