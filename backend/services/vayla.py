@@ -46,28 +46,41 @@ def _passable_by(total_t: float | None, axle_t: float | None) -> list[str]:
 
 def _extract_loads(props: dict) -> tuple[float | None, float | None]:
     """
-    Extract (total_mass_t, axle_load_t) from Väylä feature properties.
-    Field names vary across collections — try common variants.
+    Extract (total_mass_t, axle_load_t) from Väylä taitorakenteet:silta properties.
+    For vehicle combinations (trucks, military convoys) use ajoneuvoyhdistelman field.
+    Single-vehicle mass as fallback.
     """
-    def _get(*keys) -> float | None:
-        for k in keys:
-            v = props.get(k) or props.get(k.lower()) or props.get(k.upper())
-            if v not in (None, '', 0):
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    pass
+    def _f(key: str) -> float | None:
+        v = props.get(key)
+        if v not in (None, '', 0):
+            try:
+                return float(v)
+            except (ValueError, TypeError):
+                pass
         return None
 
-    total_t = _get(
-        'sallittuKokonaismassa', 'kokonaismassa', 'sallittu_kokonaismassa',
-        'totalMass', 'total_mass', 'kantavuus',
-    )
-    axle_t = _get(
-        'sallittuAkselimassa', 'akselimassa', 'sallittu_akselimassa',
-        'axleMass', 'axle_mass',
-    )
+    # Vehicle combination total mass (most relevant for logistics/military)
+    total_t = _f('ajoneuvoyhdistelman_suurin_sallittu_massa') or \
+              _f('ajoneuvon_suurin_sallittu_massa')
+
+    # Per-axle limit
+    axle_t = _f('ajoneuvon_suurin_sallittu_akselille_kohdistuva_massa')
+
     return total_t, axle_t
+
+
+def _bridge_purpose(props: dict) -> str:
+    """Extract human-readable bridge purpose from kayttotarkoitukset field."""
+    kt = props.get('kayttotarkoitukset', '')
+    if 'Raittisilta' in kt:
+        return 'pedestrian'
+    if 'Rautatiesilta' in kt:
+        return 'railway'
+    if 'Tiesilta' in kt:
+        return 'road'
+    if 'Alikulkusilta' in kt or 'alikulku' in kt.lower():
+        return 'underpass'
+    return 'road'
 
 
 async def get_bridges(bbox: tuple[float, float, float, float]) -> dict:
@@ -95,11 +108,8 @@ async def get_bridges(bbox: tuple[float, float, float, float]) -> dict:
     features = []
     errors = []
 
-    # Try both transport and digiroad collections for bridge data
     collections = [
-        f"{VAYLA_BASE}/collections/silta_kohde/items",
-        f"{VAYLA_BASE}/collections/silta/items",
-        "https://avoinapi.vaylapilvi.fi/vaylatiedot/digiroad/ogc/features/v1/collections/dr_silta/items",
+        f"{VAYLA_BASE}/collections/taitorakenteet:silta/items",
     ]
 
     async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
@@ -125,13 +135,17 @@ async def get_bridges(bbox: tuple[float, float, float, float]) -> dict:
 
                     total_t, axle_t = _extract_loads(props)
                     passable = _passable_by(total_t, axle_t)
+                    purpose = _bridge_purpose(props)
 
                     features.append({
                         'type': 'Feature',
                         'geometry': geom,
                         'properties': {
-                            'name':              props.get('nimi') or props.get('name') or '',
-                            'bridge_id':         props.get('siltanumero') or props.get('id') or feat.get('id'),
+                            'name':              props.get('nimi') or '',
+                            'bridge_id':         props.get('id') or feat.get('id'),
+                            'bridge_code':       props.get('tunnus') or '',
+                            'owner':             props.get('nykyinen_omistaja') or '',
+                            'purpose':           purpose,
                             'max_total_mass_t':  total_t,
                             'max_axle_load_t':   axle_t,
                             'passable_by':       passable,
