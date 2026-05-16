@@ -87,3 +87,4 @@ __pycache__/
 .env
 *.tif
 dem_tiles/
+/backend/venv
