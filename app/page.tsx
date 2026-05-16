@@ -146,7 +146,6 @@ function HomeContent() {
       const sanitized = sanitizeQuery(urlQuery);
       if (sanitized) {
         void handleSearch(sanitized, false);
-        return;
       }
     }
   }, [handleSearch, searchParams]);

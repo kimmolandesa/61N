@@ -15,6 +15,7 @@ This repository currently focuses on frontend-heavy spatial analysis workflows b
 
 ## What Sightline Does
 
+<<<<<<< HEAD
 Sightline combines three main capabilities:
 
 1. Section-based map analysis
@@ -199,6 +200,8 @@ flowchart LR
     class Search,AoiSearch,Intel,Weather api
     class Keb,OSM,Ext providers
 ```
+=======
+>>>>>>> e74c730b3e805ab28ee55eedc6d2653d90a5e45a
 
 ## Important Files
 
