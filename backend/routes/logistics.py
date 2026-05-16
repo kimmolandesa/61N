@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from services import chokepoint as chokepoint_svc
+from services import vayla as vayla_svc
 
 router = APIRouter()
 
@@ -64,3 +65,18 @@ async def get_support_nodes(
     Queries both OSM point and polygon layers (polygon centroids included).
     """
     return await chokepoint_svc.get_support_nodes(_bbox(bbox), type)
+
+
+@router.get("/bridges")
+async def get_bridges(
+    bbox: Annotated[str, Query(description="minx,miny,maxx,maxy (WGS84)")],
+):
+    """
+    Bridge structures from Väylä with load capacity and military vehicle passability.
+    Fields: max_total_mass_t, max_axle_load_t, passable_by (vehicle class list),
+    blocks_mbt, blocks_heavy_truck.
+    Vehicle classes: light_wheeled (12t), apc_wheeled (28t, e.g. AMV),
+    medium_truck (32t), heavy_truck (44t), tracked_ifv (40t, e.g. CV90), mbt (65t, e.g. Leopard 2).
+    Cached 24 hours.
+    """
+    return await vayla_svc.get_bridges(_bbox(bbox))

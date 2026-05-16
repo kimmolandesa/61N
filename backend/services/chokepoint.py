@@ -5,6 +5,7 @@ import math
 import networkx as nx
 
 from core.db import get_pool
+from services.vayla import get_bridges, match_bridges_to_osm
 
 
 # ── Road speed table (km/h) ───────────────────────────────────────────────────
@@ -139,11 +140,16 @@ async def get_chokepoints(bbox: tuple) -> dict:
     """
     Rank road segments by edge betweenness centrality.
     Bridges and tunnels get a structural multiplier.
+    Bridge segments are enriched with Väylä load capacity data.
     Returns top-30 segments as GeoJSON FeatureCollection.
     """
     rows = await _fetch_roads(bbox)
     if not rows:
         return {'type': 'FeatureCollection', 'features': []}
+
+    # Fetch Väylä bridge data concurrently with graph computation
+    vayla_result = await get_bridges(bbox)
+    vayla_features = vayla_result.get('features', [])
 
     def _compute():
         G, edge_meta = _build_graph(rows)
@@ -169,12 +175,26 @@ async def get_chokepoints(bbox: tuple) -> dict:
 
         scored.sort(reverse=True)
 
+        # Collect OSM bridge segments from top-30 for Väylä matching
+        top_segments = []
+        for _score, _u, _v, meta in scored[:30]:
+            if meta['bridge']:
+                try:
+                    geom = json.loads(meta['geometry'])
+                    top_segments.append({'osm_id': meta['osm_id'], 'geometry': geom})
+                except Exception:
+                    pass
+
+        vayla_match = match_bridges_to_osm(vayla_features, top_segments)
+
         features = []
         for rank, (score, _u, _v, meta) in enumerate(scored[:30], 1):
             try:
                 geom = json.loads(meta['geometry'])
             except Exception:
                 continue
+
+            load = vayla_match.get(meta['osm_id'], {})
             features.append({
                 'type': 'Feature',
                 'geometry': geom,
@@ -192,6 +212,13 @@ async def get_chokepoints(bbox: tuple) -> dict:
                         'tunnel' if meta['tunnel'] else
                         'road_bottleneck'
                     ),
+                    # Väylä load capacity (None if not matched)
+                    'max_total_mass_t':   load.get('max_total_mass_t'),
+                    'max_axle_load_t':    load.get('max_axle_load_t'),
+                    'passable_by':        load.get('passable_by'),
+                    'passable_labels':    load.get('passable_labels'),
+                    'blocks_mbt':         load.get('blocks_mbt'),
+                    'blocks_heavy_truck': load.get('blocks_heavy_truck'),
                 },
             })
         return features
