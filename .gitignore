@@ -80,4 +80,10 @@ logs
 /data/
 *.geojson
 *.osm
-skills/
+skills/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+*.tif
+dem_tiles/
