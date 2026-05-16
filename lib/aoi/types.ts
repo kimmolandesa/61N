@@ -1,8 +1,26 @@
-export type AoiInputMode = "polygon" | "bbox" | "manual";
+export type AoiShapeType =
+  | "polygon"
+  | "rectangle"
+  | "circle"
+  | "freehand";
 
-export interface AoiGeometry {
-  type: "Polygon";
-  coordinates: number[][][];
+export type AoiDataFilter =
+  | "terrain"
+  | "weather"
+  | "roads"
+  | "bridges"
+  | "population"
+  | "telecom"
+  | "satellite"
+  | "healthcare"
+  | "power"
+  | "water"
+  | "logistics";
+
+export interface AoiComment {
+  id: string;
+  text: string;
+  createdAt: string;
 }
 
 export interface AoiBounds {
@@ -14,14 +32,18 @@ export interface AoiBounds {
 
 export interface AoiSelection {
   id: string;
-  name?: string;
-  mode: AoiInputMode;
-  geometry: AoiGeometry;
+  name: string;
+  notes: string;
+  comments: AoiComment[];
+  shapeType: AoiShapeType;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
   bounds: AoiBounds;
   center: {
     lon: number;
     lat: number;
   };
   areaSqKm?: number;
+  selectedFilters: AoiDataFilter[];
   createdAt: string;
+  updatedAt: string;
 }

@@ -18,14 +18,18 @@ function isAoiSelection(value: unknown): value is AoiSelection {
   const candidate = value as Partial<AoiSelection>;
   return (
     typeof candidate.id === "string" &&
-    typeof candidate.mode === "string" &&
+    typeof candidate.name === "string" &&
+    typeof candidate.notes === "string" &&
+    Array.isArray(candidate.comments) &&
+    typeof candidate.shapeType === "string" &&
+    Array.isArray(candidate.selectedFilters) &&
     isObject(candidate.bounds) &&
     typeof candidate.bounds.west === "number" &&
     typeof candidate.bounds.south === "number" &&
     typeof candidate.bounds.east === "number" &&
     typeof candidate.bounds.north === "number" &&
     isObject(candidate.geometry) &&
-    candidate.geometry.type === "Polygon" &&
+    (candidate.geometry.type === "Polygon" || candidate.geometry.type === "MultiPolygon") &&
     Array.isArray(candidate.geometry.coordinates)
   );
 }

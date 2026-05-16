@@ -1197,6 +1197,10 @@ body {
   gap: 8px;
 }
 
+.aoi-draw-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .aoi-tool-button,
 .aoi-clear-button,
 .aoi-apply-button,
@@ -1349,6 +1353,25 @@ body {
   cursor: default;
 }
 
+.aoi-detail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aoi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aoi-field-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .aoi-manual-form {
   display: flex;
   flex-direction: column;
@@ -1373,6 +1396,50 @@ body {
 
 .aoi-input::placeholder {
   color: var(--text-muted);
+}
+
+.aoi-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 88px;
+}
+
+.aoi-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.aoi-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.aoi-filter-option input {
+  accent-color: #f59e0b;
+}
+
+.aoi-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.aoi-delete-primary {
+  align-self: stretch;
 }
 
 .aoi-status-message,

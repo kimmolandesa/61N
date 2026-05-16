@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAoiSelection, validateBounds, validatePolygon } from "@/lib/aoi/utils";
-import type { AoiBounds, AoiGeometry, AoiInputMode, AoiSelection } from "@/lib/aoi/types";
+import { createAoiSelection, validateBounds, validateGeometry } from "@/lib/aoi/utils";
+import type { AoiBounds, AoiSelection, AoiShapeType } from "@/lib/aoi/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === "string";
 }
 
 function isBounds(value: unknown): value is AoiBounds {
@@ -26,19 +22,16 @@ function isBounds(value: unknown): value is AoiBounds {
   });
 }
 
-function isPolygonGeometry(value: unknown): value is AoiGeometry {
-  if (!isObject(value)) {
+function isGeometry(value: unknown): value is GeoJSON.Polygon | GeoJSON.MultiPolygon {
+  if (!isObject(value) || !("type" in value) || !("coordinates" in value)) {
     return false;
   }
 
-  return validatePolygon({
-    type: value.type as "Polygon",
-    coordinates: value.coordinates as number[][][],
-  });
+  return validateGeometry(value as unknown as GeoJSON.Polygon | GeoJSON.MultiPolygon);
 }
 
-function isMode(value: unknown): value is AoiInputMode {
-  return value === "polygon" || value === "bbox" || value === "manual";
+function isShapeType(value: unknown): value is AoiShapeType {
+  return value === "polygon" || value === "rectangle" || value === "circle" || value === "freehand";
 }
 
 export async function POST(
@@ -46,50 +39,48 @@ export async function POST(
 ): Promise<NextResponse<AoiSelection | { error: string }>> {
   try {
     const body = (await request.json()) as {
-      mode?: unknown;
+      shapeType?: unknown;
       name?: unknown;
+      notes?: unknown;
       bounds?: unknown;
       geometry?: unknown;
     };
 
-    if (!isMode(body.mode)) {
-      return NextResponse.json({ error: "Invalid AOI mode." }, { status: 400 });
+    if (!isShapeType(body.shapeType)) {
+      return NextResponse.json({ error: "Invalid AOI shape type." }, { status: 400 });
     }
 
-    const name = isString(body.name) ? body.name : undefined;
+    const geometry =
+      isGeometry(body.geometry)
+        ? body.geometry
+        : isBounds(body.bounds)
+          ? {
+              type: "Polygon" as const,
+              coordinates: [[
+                [body.bounds.west, body.bounds.south],
+                [body.bounds.east, body.bounds.south],
+                [body.bounds.east, body.bounds.north],
+                [body.bounds.west, body.bounds.north],
+                [body.bounds.west, body.bounds.south],
+              ]],
+            }
+          : null;
 
-    if ((body.mode === "bbox" || body.mode === "manual") && isBounds(body.bounds)) {
-      const selection = createAoiSelection({
-        mode: body.mode,
-        bounds: body.bounds,
-        name,
-      });
-
-      return NextResponse.json(selection);
+    if (!geometry) {
+      return NextResponse.json({ error: "Invalid AOI payload." }, { status: 400 });
     }
 
-    if (body.mode === "polygon" && isPolygonGeometry(body.geometry)) {
-      const selection = createAoiSelection({
-        mode: body.mode,
-        geometry: body.geometry,
-        name,
-      });
+    const selection = createAoiSelection({
+      index: 1,
+      geometry,
+      shapeType: body.shapeType,
+      name: typeof body.name === "string" ? body.name : undefined,
+      notes: typeof body.notes === "string" ? body.notes : undefined,
+    });
 
-      return NextResponse.json(selection);
-    }
-
-    return NextResponse.json({ error: "Invalid AOI payload." }, { status: 400 });
+    return NextResponse.json(selection);
   } catch (error) {
     console.error("AOI API error:", error);
-
-    return NextResponse.json(
-      {
-        error: "Unable to process AOI selection.",
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Unable to process AOI selection." }, { status: 500 });
   }
 }
-
-// TODO: fan out the normalized AOI into area scraping/fetching pipelines for weather,
-// terrain, infrastructure, telecom, population, and satellite intelligence sources.

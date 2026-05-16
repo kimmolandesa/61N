@@ -10,7 +10,11 @@ function isAoiSelection(value: unknown): value is AoiSelection {
   const selection = value as Partial<AoiSelection>;
   return (
     typeof selection.id === "string" &&
-    typeof selection.mode === "string" &&
+    typeof selection.name === "string" &&
+    typeof selection.notes === "string" &&
+    Array.isArray(selection.comments) &&
+    typeof selection.shapeType === "string" &&
+    Array.isArray(selection.selectedFilters) &&
     !!selection.bounds &&
     typeof selection.bounds.west === "number" &&
     typeof selection.bounds.south === "number" &&
@@ -20,9 +24,10 @@ function isAoiSelection(value: unknown): value is AoiSelection {
     typeof selection.center.lon === "number" &&
     typeof selection.center.lat === "number" &&
     !!selection.geometry &&
-    selection.geometry.type === "Polygon" &&
+    (selection.geometry.type === "Polygon" || selection.geometry.type === "MultiPolygon") &&
     Array.isArray(selection.geometry.coordinates) &&
-    typeof selection.createdAt === "string"
+    typeof selection.createdAt === "string" &&
+    typeof selection.updatedAt === "string"
   );
 }
 

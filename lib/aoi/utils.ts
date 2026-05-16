@@ -1,4 +1,18 @@
-import type { AoiBounds, AoiGeometry, AoiInputMode, AoiSelection } from "@/lib/aoi/types";
+import type {
+  AoiBounds,
+  AoiComment,
+  AoiDataFilter,
+  AoiSelection,
+  AoiShapeType,
+} from "@/lib/aoi/types";
+
+export const DEFAULT_AOI_FILTERS: AoiDataFilter[] = [
+  "terrain",
+  "weather",
+  "roads",
+  "bridges",
+  "population",
+];
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -18,39 +32,85 @@ function normalizeRing(ring: number[][]): number[][] {
   return [...ring, [firstLon, firstLat]];
 }
 
-function approximatePolygonAreaSqKm(geometry: AoiGeometry): number | undefined {
-  const ring = geometry.coordinates[0];
-  if (!ring || ring.length < 4) {
+function normalizePolygon(polygon: GeoJSON.Polygon): GeoJSON.Polygon {
+  return {
+    type: "Polygon",
+    coordinates: polygon.coordinates.map((ring) => normalizeRing(ring as number[][])),
+  };
+}
+
+function normalizeMultiPolygon(multiPolygon: GeoJSON.MultiPolygon): GeoJSON.MultiPolygon {
+  return {
+    type: "MultiPolygon",
+    coordinates: multiPolygon.coordinates.map((polygon) =>
+      polygon.map((ring) => normalizeRing(ring as number[][])),
+    ),
+  };
+}
+
+function polygonRings(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): number[][][] {
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates as number[][][];
+  }
+
+  return geometry.coordinates.flatMap((polygon) => polygon as number[][][]);
+}
+
+function coordinateSets(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): number[][] {
+  return polygonRings(geometry).flatMap((ring) => ring);
+}
+
+function approximatePolygonAreaSqKm(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): number | undefined {
+  const rings = polygonRings(geometry);
+  if (rings.length === 0) {
     return undefined;
   }
 
-  const meanLatRadians =
-    (ring.reduce((total, [, lat]) => total + lat, 0) / ring.length) * (Math.PI / 180);
-  const kmPerDegLat = 111.32;
-  const kmPerDegLon = 111.32 * Math.cos(meanLatRadians);
+  let totalArea = 0;
 
-  let shoelace = 0;
-  for (let index = 0; index < ring.length - 1; index += 1) {
-    const [lon1, lat1] = ring[index];
-    const [lon2, lat2] = ring[index + 1];
-    const x1 = lon1 * kmPerDegLon;
-    const y1 = lat1 * kmPerDegLat;
-    const x2 = lon2 * kmPerDegLon;
-    const y2 = lat2 * kmPerDegLat;
-    shoelace += x1 * y2 - x2 * y1;
+  for (const ring of rings) {
+    if (ring.length < 4) {
+      continue;
+    }
+
+    const meanLatRadians =
+      (ring.reduce((total, [, lat]) => total + lat, 0) / ring.length) * (Math.PI / 180);
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos(meanLatRadians);
+
+    let shoelace = 0;
+    for (let index = 0; index < ring.length - 1; index += 1) {
+      const [lon1, lat1] = ring[index];
+      const [lon2, lat2] = ring[index + 1];
+      const x1 = lon1 * kmPerDegLon;
+      const y1 = lat1 * kmPerDegLat;
+      const x2 = lon2 * kmPerDegLon;
+      const y2 = lat2 * kmPerDegLat;
+      shoelace += x1 * y2 - x2 * y1;
+    }
+
+    totalArea += Math.abs(shoelace) / 2;
   }
 
-  return Math.abs(shoelace) / 2;
+  return totalArea;
 }
 
-export function polygonToBounds(geometry: AoiGeometry): AoiBounds {
-  const ring = geometry.coordinates[0] ?? [];
+export function polygonToBounds(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): AoiBounds {
+  const coordinates = coordinateSets(geometry);
   let west = Number.POSITIVE_INFINITY;
   let south = Number.POSITIVE_INFINITY;
   let east = Number.NEGATIVE_INFINITY;
   let north = Number.NEGATIVE_INFINITY;
 
-  for (const coordinate of ring) {
+  for (const coordinate of coordinates) {
     const [lon, lat] = coordinate;
     west = Math.min(west, lon);
     south = Math.min(south, lat);
@@ -61,7 +121,7 @@ export function polygonToBounds(geometry: AoiGeometry): AoiBounds {
   return { west, south, east, north };
 }
 
-export function boundsToPolygon(bounds: AoiBounds): AoiGeometry {
+export function boundsToPolygon(bounds: AoiBounds): GeoJSON.Polygon {
   return {
     type: "Polygon",
     coordinates: [[
@@ -74,7 +134,9 @@ export function boundsToPolygon(bounds: AoiBounds): AoiGeometry {
   };
 }
 
-export function getPolygonCenter(geometry: AoiGeometry): { lon: number; lat: number } {
+export function getPolygonCenter(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): { lon: number; lat: number } {
   const bounds = polygonToBounds(geometry);
   return {
     lon: (bounds.west + bounds.east) / 2,
@@ -101,68 +163,91 @@ export function validateBounds(bounds: AoiBounds): boolean {
   );
 }
 
-export function validatePolygon(geometry: AoiGeometry): boolean {
-  if (geometry.type !== "Polygon" || geometry.coordinates.length === 0) {
+export function validateGeometry(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): boolean {
+  if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") {
     return false;
   }
 
-  const ring = geometry.coordinates[0];
-  if (!Array.isArray(ring) || ring.length < 4) {
+  const rings = polygonRings(geometry);
+  if (rings.length === 0) {
     return false;
   }
 
-  const closedRing = normalizeRing(ring);
-  const [firstLon, firstLat] = closedRing[0];
-  const [lastLon, lastLat] = closedRing[closedRing.length - 1];
+  return rings.every((ring) => {
+    if (!Array.isArray(ring) || ring.length < 4) {
+      return false;
+    }
 
-  if (firstLon !== lastLon || firstLat !== lastLat) {
-    return false;
+    const closedRing = normalizeRing(ring);
+    const [firstLon, firstLat] = closedRing[0];
+    const [lastLon, lastLat] = closedRing[closedRing.length - 1];
+    if (firstLon !== lastLon || firstLat !== lastLat) {
+      return false;
+    }
+
+    return closedRing.every(
+      (coordinate) =>
+        Array.isArray(coordinate) &&
+        coordinate.length === 2 &&
+        isFiniteNumber(coordinate[0]) &&
+        isFiniteNumber(coordinate[1]) &&
+        coordinate[0] >= -180 &&
+        coordinate[0] <= 180 &&
+        coordinate[1] >= -90 &&
+        coordinate[1] <= 90,
+    );
+  });
+}
+
+export function normalizeGeometry(
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon,
+): GeoJSON.Polygon | GeoJSON.MultiPolygon {
+  if (geometry.type === "Polygon") {
+    return normalizePolygon(geometry);
   }
 
-  return closedRing.every(
-    (coordinate) =>
-      Array.isArray(coordinate) &&
-      coordinate.length === 2 &&
-      isFiniteNumber(coordinate[0]) &&
-      isFiniteNumber(coordinate[1]) &&
-      coordinate[0] >= -180 &&
-      coordinate[0] <= 180 &&
-      coordinate[1] >= -90 &&
-      coordinate[1] <= 90,
-  );
+  return normalizeMultiPolygon(geometry);
 }
 
 export function createAoiSelection(input: {
-  mode: AoiInputMode;
+  id?: string;
+  index: number;
   name?: string;
-  bounds?: AoiBounds;
-  geometry?: AoiGeometry;
+  notes?: string;
+  comments?: AoiComment[];
+  shapeType: AoiShapeType;
+  geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
+  selectedFilters?: AoiDataFilter[];
+  createdAt?: string;
+  updatedAt?: string;
 }): AoiSelection {
-  const geometry = input.geometry ?? (input.bounds ? boundsToPolygon(input.bounds) : undefined);
-  if (!geometry || !validatePolygon(geometry)) {
-    throw new Error("Invalid AOI polygon");
+  if (!validateGeometry(input.geometry)) {
+    throw new Error("Invalid AOI geometry");
   }
 
-  const normalizedGeometry: AoiGeometry = {
-    type: "Polygon",
-    coordinates: [normalizeRing(geometry.coordinates[0])],
-  };
+  const normalizedGeometry = normalizeGeometry(input.geometry);
   const bounds = polygonToBounds(normalizedGeometry);
   if (!validateBounds(bounds)) {
     throw new Error("Invalid AOI bounds");
   }
 
-  const center = getPolygonCenter(normalizedGeometry);
-  const timestamp = new Date().toISOString();
+  const timestamp = input.updatedAt ?? new Date().toISOString();
+  const createdAt = input.createdAt ?? timestamp;
 
   return {
-    id: `aoi-${crypto.randomUUID()}`,
-    name: input.name?.trim() || undefined,
-    mode: input.mode,
+    id: input.id ?? `aoi-${crypto.randomUUID()}`,
+    name: input.name?.trim() || `Area ${input.index}`,
+    notes: input.notes ?? "",
+    comments: input.comments ?? [],
+    shapeType: input.shapeType,
     geometry: normalizedGeometry,
     bounds,
-    center,
+    center: getPolygonCenter(normalizedGeometry),
     areaSqKm: approximatePolygonAreaSqKm(normalizedGeometry),
-    createdAt: timestamp,
+    selectedFilters: input.selectedFilters ?? [...DEFAULT_AOI_FILTERS],
+    createdAt,
+    updatedAt: timestamp,
   };
 }

@@ -1,22 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, { type GeoJSONSource, type LngLatBoundsLike, type StyleSpecification } from "maplibre-gl";
+import maplibregl, {
+  type GeoJSONSource,
+  type LngLatBoundsLike,
+  type StyleSpecification,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   TerraDraw,
+  TerraDrawCircleMode,
+  TerraDrawFreehandMode,
   TerraDrawPolygonMode,
   TerraDrawRectangleMode,
   TerraDrawSelectMode,
   type GeoJSONStoreFeatures,
 } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
-import type { AreaIntelReport } from "@/lib/aoi/intel";
-import { readStoredAoiSelections, writeStoredAoiSelections } from "@/lib/aoi/storage";
-import type { AoiBounds, AoiGeometry, AoiSelection } from "@/lib/aoi/types";
 import type { Asset } from "@/lib/types";
 import type { IntelFeature } from "@/lib/intel/types";
 import type { WeatherForecastEntry } from "@/lib/intel/weather";
+import { useAoiManager } from "@/hooks/useAoiManager";
+import type { AoiSelection, AoiShapeType } from "@/lib/aoi/types";
+import AoiPanel, { type AoiDrawMode } from "@/components/aoi/AoiPanel";
 import AssetInfoModal from "./AssetInfoModal";
 
 interface MapViewProps {
@@ -36,21 +42,22 @@ interface ResultFeatureProperties {
   name: string;
   type: string;
   operator: string | null;
-  lat: number;
-  lon: number;
-  osmPath: string;
   popupHtml: string;
 }
 
 interface WeatherFeatureProperties {
   id: string;
   name: string;
-  condition: string;
   icon: string;
   popupHtml: string;
 }
 
-type AoiTool = "idle" | "polygon" | "bbox";
+interface AoiFeatureProperties {
+  id: string;
+  name: string;
+  shapeType: AoiShapeType;
+  selected: boolean;
+}
 
 const MAP_STYLE_STORAGE_KEY = "sightline-map-style";
 const DEFAULT_BASEMAP: BasemapKey = "street";
@@ -68,10 +75,10 @@ const RESULTS_CLUSTER_COUNT_LAYER_ID = "sightline-results-cluster-count";
 const WEATHER_SOURCE_ID = "sightline-weather";
 const WEATHER_CIRCLE_LAYER_ID = "sightline-weather-circles";
 const WEATHER_ICON_LAYER_ID = "sightline-weather-icons";
-const AOI_SOURCE_ID = "aoi-source";
+const AOI_SOURCE_ID = "aoi-collection";
 const AOI_FILL_LAYER_ID = "aoi-fill";
 const AOI_OUTLINE_LAYER_ID = "aoi-outline";
-const AOI_ACTIVE_OUTLINE_LAYER_ID = "aoi-active-outline";
+const AOI_SELECTED_OUTLINE_LAYER_ID = "aoi-selected-outline";
 
 const SHARED_GLYPHS = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
@@ -198,6 +205,13 @@ function boundsToMapLibre(bounds: [number, number, number, number]): LngLatBound
   ];
 }
 
+function aoiBoundsToMapLibre(aoi: AoiSelection): LngLatBoundsLike {
+  return [
+    [aoi.bounds.west, aoi.bounds.south],
+    [aoi.bounds.east, aoi.bounds.north],
+  ];
+}
+
 function createResultPopupHtml(asset: Asset): string {
   const safeName = escapeHtml(asset.name);
   const safeType = escapeHtml(asset.type);
@@ -215,7 +229,6 @@ function createResultPopupHtml(asset: Asset): string {
       <div class="popup-title">${safeName}</div>
       <div class="popup-type">${safeType}</div>
       ${safeOperator ? `<div class="popup-operator">${safeOperator}</div>` : ""}
-      <div class="popup-coords">${asset.lat.toFixed(5)}, ${asset.lon.toFixed(5)}</div>
       ${tags ? `<table class="popup-tags">${tags}</table>` : ""}
       <div class="popup-links">
         <button class="popup-more-info-btn" data-asset-id="${escapeHtml(asset.id)}">More Info</button>
@@ -243,20 +256,9 @@ function createWeatherPopupHtml(feature: IntelFeature): string {
         hour: "2-digit",
         minute: "2-digit",
       });
-      const temp =
-        typeof entry.temperature === "number"
-          ? `${entry.temperature.toFixed(1)}°C`
-          : "n/a";
-      const clouds =
-        typeof entry.cloudCover === "number"
-          ? `${Math.round(entry.cloudCover)}% cloud`
-          : "cloud n/a";
-      const precipitation =
-        typeof entry.precipitationAmount === "number"
-          ? `${entry.precipitationAmount.toFixed(1)} mm`
-          : "dry";
-
-      return `<tr><td class="popup-key">${icon} ${time}</td><td class="popup-value">${temp} · ${clouds} · ${precipitation}</td></tr>`;
+      return `<tr><td class="popup-key">${icon} ${time}</td><td class="popup-value">${escapeHtml(
+        entry.condition,
+      )}</td></tr>`;
     })
     .join("");
 
@@ -269,56 +271,71 @@ function createWeatherPopupHtml(feature: IntelFeature): string {
   `;
 }
 
+function emptyFeatureCollection(): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
 function asGeoJSONSource(map: maplibregl.Map, sourceId: string): GeoJSONSource | null {
   const source = map.getSource(sourceId);
   return source && "setData" in source ? (source as GeoJSONSource) : null;
 }
 
-function emptyFeatureCollection(): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: [],
-  };
-}
-
-function aoiBoundsToMapLibre(bounds: AoiBounds): LngLatBoundsLike {
-  return [
-    [bounds.west, bounds.south],
-    [bounds.east, bounds.north],
-  ];
-}
-
 function asAoiGeometry(
   geometry: GeoJSONStoreFeatures["geometry"],
-): AoiGeometry | null {
-  if (geometry.type !== "Polygon") {
-    return null;
+): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
+  const candidate = geometry as unknown as GeoJSON.Geometry;
+  if (candidate.type === "Polygon" || candidate.type === "MultiPolygon") {
+    return candidate;
   }
 
-  return {
-    type: "Polygon",
-    coordinates: geometry.coordinates as number[][][],
-  };
+  return null;
 }
 
-function getAoiModeFromFeature(feature: GeoJSONStoreFeatures): "polygon" | "bbox" {
-  const featureMode =
-    typeof feature.properties?.mode === "string" ? feature.properties.mode : "";
-  return featureMode.includes("rectangle") ? "bbox" : "polygon";
+function terraModeFromShapeType(shapeType: AoiShapeType): string {
+  if (shapeType === "rectangle") {
+    return "rectangle";
+  }
+
+  if (shapeType === "circle") {
+    return "circle";
+  }
+
+  if (shapeType === "freehand") {
+    return "freehand";
+  }
+
+  return "polygon";
+}
+
+function shapeTypeFromFeature(feature: GeoJSONStoreFeatures): AoiShapeType {
+  const mode = typeof feature.properties?.mode === "string" ? feature.properties.mode : "";
+  if (mode.includes("rectangle")) {
+    return "rectangle";
+  }
+
+  if (mode.includes("circle")) {
+    return "circle";
+  }
+
+  if (mode.includes("freehand")) {
+    return "freehand";
+  }
+
+  return "polygon";
 }
 
 function ensureSourcesAndLayers(map: maplibregl.Map): void {
   if (!map.getSource(RESULTS_SOURCE_ID)) {
     map.addSource(RESULTS_SOURCE_ID, {
       type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
+      data: emptyFeatureCollection(),
     });
   }
 
   if (!map.getSource(RESULTS_CLUSTER_SOURCE_ID)) {
     map.addSource(RESULTS_CLUSTER_SOURCE_ID, {
       type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
+      data: emptyFeatureCollection(),
       cluster: true,
       clusterRadius: 50,
       clusterMaxZoom: 13,
@@ -328,7 +345,7 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
   if (!map.getSource(WEATHER_SOURCE_ID)) {
     map.addSource(WEATHER_SOURCE_ID, {
       type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
+      data: emptyFeatureCollection(),
     });
   }
 
@@ -346,24 +363,8 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       source: RESULTS_CLUSTER_SOURCE_ID,
       filter: ["has", "point_count"],
       paint: {
-        "circle-color": [
-          "step",
-          ["get", "point_count"],
-          "#3b82f6",
-          10,
-          "#f59e0b",
-          100,
-          "#ef4444",
-        ],
-        "circle-radius": [
-          "step",
-          ["get", "point_count"],
-          18,
-          10,
-          24,
-          100,
-          32,
-        ],
+        "circle-color": ["step", ["get", "point_count"], "#3b82f6", 10, "#f59e0b", 100, "#ef4444"],
+        "circle-radius": ["step", ["get", "point_count"], 18, 10, 24, 100, 32],
         "circle-stroke-color": "#0d1117",
         "circle-stroke-width": 2,
         "circle-opacity": 0.92,
@@ -471,7 +472,7 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       source: AOI_SOURCE_ID,
       paint: {
         "fill-color": "#f59e0b",
-        "fill-opacity": 0.2,
+        "fill-opacity": 0.18,
       },
     });
   }
@@ -484,17 +485,17 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       paint: {
         "line-color": "#fbbf24",
         "line-width": 2,
-        "line-opacity": 0.95,
+        "line-opacity": 0.65,
       },
     });
   }
 
-  if (!map.getLayer(AOI_ACTIVE_OUTLINE_LAYER_ID)) {
+  if (!map.getLayer(AOI_SELECTED_OUTLINE_LAYER_ID)) {
     map.addLayer({
-      id: AOI_ACTIVE_OUTLINE_LAYER_ID,
+      id: AOI_SELECTED_OUTLINE_LAYER_ID,
       type: "line",
       source: AOI_SOURCE_ID,
-      filter: ["==", ["get", "active"], true],
+      filter: ["==", ["get", "selected"], true],
       paint: {
         "line-color": "#fde68a",
         "line-width": 4,
@@ -517,31 +518,38 @@ export default function MapView({
   const [modalAsset, setModalAsset] = useState<Asset | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeBasemap, setActiveBasemap] = useState<BasemapKey>(() => readStoredBasemap());
-  const [aoiTool, setAoiTool] = useState<AoiTool>("idle");
-  const [aoiSelections, setAoiSelections] = useState<AoiSelection[]>([]);
-  const [activeAoiId, setActiveAoiId] = useState<string | null>(null);
-  const [aoiError, setAoiError] = useState<string | null>(null);
-  const [aoiIntelReport, setAoiIntelReport] = useState<AreaIntelReport | null>(null);
-  const [aoiLoadingIntel, setAoiLoadingIntel] = useState(false);
-  const [manualName, setManualName] = useState("");
-  const [manualWest, setManualWest] = useState("");
-  const [manualSouth, setManualSouth] = useState("");
-  const [manualEast, setManualEast] = useState("");
-  const [manualNorth, setManualNorth] = useState("");
+  const [drawMode, setDrawMode] = useState<AoiDrawMode>("idle");
+  const [fetchMessage, setFetchMessage] = useState<string | null>(null);
+  const [isFetchingData, setIsFetchingData] = useState(false);
+
+  const {
+    aois,
+    selectedAoiId,
+    selectedAoi,
+    addAoiFromGeometry,
+    updateAoi,
+    replaceAoiGeometry,
+    deleteAoi,
+    selectAoi,
+    clearAllAois,
+    addComment,
+    toggleFilter,
+  } = useAoiManager();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const drawRef = useRef<TerraDraw | null>(null);
   const resultsRef = useRef<Asset[]>(results);
   const selectedIdRef = useRef<string | null>(selectedId);
-  const aoiToolRef = useRef<AoiTool>("idle");
-  const manualNameRef = useRef("");
-  const activeAoiIdRef = useRef<string | null>(null);
-  const aoiStorageReadyRef = useRef(false);
+  const drawModeRef = useRef<AoiDrawMode>(drawMode);
+  const selectedAoiRef = useRef<AoiSelection | null>(selectedAoi);
   const weatherGeoJsonRef = useRef<
     GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>
   >(emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>);
-  const aoiGeoJsonRef = useRef<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Polygon>);
+  const aoiGeoJsonRef = useRef<
+    GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>
+  >(emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>);
 
   useEffect(() => {
     resultsRef.current = results;
@@ -552,31 +560,12 @@ export default function MapView({
   }, [selectedId]);
 
   useEffect(() => {
-    aoiToolRef.current = aoiTool;
-  }, [aoiTool]);
+    drawModeRef.current = drawMode;
+  }, [drawMode]);
 
   useEffect(() => {
-    manualNameRef.current = manualName;
-  }, [manualName]);
-
-  useEffect(() => {
-    activeAoiIdRef.current = activeAoiId;
-  }, [activeAoiId]);
-
-  useEffect(() => {
-    const storedSelections = readStoredAoiSelections();
-    setAoiSelections(storedSelections);
-    setActiveAoiId(storedSelections[0]?.id ?? null);
-    aoiStorageReadyRef.current = true;
-  }, []);
-
-  useEffect(() => {
-    if (!aoiStorageReadyRef.current) {
-      return;
-    }
-
-    writeStoredAoiSelections(aoiSelections);
-  }, [aoiSelections]);
+    selectedAoiRef.current = selectedAoi;
+  }, [selectedAoi]);
 
   const filteredResults = useMemo(() => {
     let filtered = results;
@@ -592,7 +581,9 @@ export default function MapView({
     return filtered;
   }, [results, filterOperator, filterType]);
 
-  const resultsGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>>(
+  const resultsGeoJson = useMemo<
+    GeoJSON.FeatureCollection<GeoJSON.Point, ResultFeatureProperties>
+  >(
     () => ({
       type: "FeatureCollection",
       features: filteredResults
@@ -609,9 +600,6 @@ export default function MapView({
             name: asset.name,
             type: asset.type,
             operator: asset.operator,
-            lat: asset.lat,
-            lon: asset.lon,
-            osmPath: asset.id,
             popupHtml: createResultPopupHtml(asset),
           },
         })),
@@ -624,7 +612,10 @@ export default function MapView({
   >(() => {
     const selectedAsset = filteredResults.find((asset) => asset.id === selectedId);
     if (!selectedAsset || !isValidCoordinate(selectedAsset.lat, selectedAsset.lon)) {
-      return { type: "FeatureCollection", features: [] };
+      return emptyFeatureCollection() as GeoJSON.FeatureCollection<
+        GeoJSON.Point,
+        ResultFeatureProperties
+      >;
     }
 
     return {
@@ -642,9 +633,6 @@ export default function MapView({
             name: selectedAsset.name,
             type: selectedAsset.type,
             operator: selectedAsset.operator,
-            lat: selectedAsset.lat,
-            lon: selectedAsset.lon,
-            osmPath: selectedAsset.id,
             popupHtml: createResultPopupHtml(selectedAsset),
           },
         },
@@ -654,147 +642,63 @@ export default function MapView({
 
   const weatherGeoJson = useMemo<
     GeoJSON.FeatureCollection<GeoJSON.Point, WeatherFeatureProperties>
-  >(() => ({
-    type: "FeatureCollection",
-    features: weatherFeatures
-      .filter((feature): feature is IntelFeature & { geometry: GeoJSON.Point } => feature.geometry.type === "Point")
-      .filter((feature) => {
-        const [lon, lat] = feature.geometry.coordinates;
-        return isValidCoordinate(lat, lon);
-      })
-      .map((feature) => {
-        const icon =
-          typeof feature.properties.condition === "string"
-            ? WEATHER_ICONS[feature.properties.condition] ?? "☀"
-            : "☀";
-
-        return {
+  >(
+    () => ({
+      type: "FeatureCollection",
+      features: weatherFeatures
+        .filter(
+          (feature): feature is IntelFeature & { geometry: GeoJSON.Point } =>
+            feature.geometry.type === "Point",
+        )
+        .filter((feature) => {
+          const [lon, lat] = feature.geometry.coordinates;
+          return isValidCoordinate(lat, lon);
+        })
+        .map((feature) => ({
           type: "Feature",
           id: feature.id,
-          geometry: {
-            type: "Point",
-            coordinates: feature.geometry.coordinates,
-          },
+          geometry: feature.geometry,
           properties: {
             id: feature.id,
             name: feature.name ?? "Weather Forecast",
-            condition:
+            icon:
               typeof feature.properties.condition === "string"
-                ? feature.properties.condition
-                : "clear",
-            icon,
+                ? WEATHER_ICONS[feature.properties.condition] ?? "☀"
+                : "☀",
             popupHtml: createWeatherPopupHtml(feature),
           },
-        };
-      }),
-  }), [weatherFeatures]);
+        })),
+    }),
+    [weatherFeatures],
+  );
 
   useEffect(() => {
     weatherGeoJsonRef.current = weatherGeoJson;
   }, [weatherGeoJson]);
 
-  const activeAoi = useMemo(
-    () => aoiSelections.find((selection) => selection.id === activeAoiId) ?? null,
-    [aoiSelections, activeAoiId],
-  );
-
-  const aoiGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Polygon>>(() => {
-    if (aoiSelections.length === 0) {
-      return emptyFeatureCollection() as GeoJSON.FeatureCollection<GeoJSON.Polygon>;
-    }
-
-    return {
+  const aoiGeoJson = useMemo<
+    GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>
+  >(
+    () => ({
       type: "FeatureCollection",
-      features: aoiSelections.map((selection) => ({
-          type: "Feature",
-          id: selection.id,
-          geometry: selection.geometry,
-          properties: {
-            id: selection.id,
-            name: selection.name ?? "Area of Interest",
-            active: selection.id === activeAoiId,
-          },
-        })),
-    };
-  }, [activeAoiId, aoiSelections]);
+      features: aois.map((aoi) => ({
+        type: "Feature",
+        id: aoi.id,
+        geometry: aoi.geometry,
+        properties: {
+          id: aoi.id,
+          name: aoi.name,
+          shapeType: aoi.shapeType,
+          selected: aoi.id === selectedAoiId,
+        },
+      })),
+    }),
+    [aois, selectedAoiId],
+  );
 
   useEffect(() => {
     aoiGeoJsonRef.current = aoiGeoJson;
   }, [aoiGeoJson]);
-
-  const normalizeAoi = useCallback(
-    async (payload: { mode: "polygon" | "bbox" | "manual"; geometry?: AoiGeometry; bounds?: AoiBounds; name?: string }) => {
-      const response = await fetch("/api/aoi", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = (await response.json()) as AoiSelection | { error?: string };
-      if (!response.ok) {
-        throw new Error(
-          "error" in data && typeof data.error === "string"
-            ? data.error
-            : "Unable to create area of interest.",
-        );
-      }
-
-      return data as AoiSelection;
-    },
-    [],
-  );
-
-  const populateManualForm = useCallback((selection: AoiSelection | null) => {
-    if (!selection) {
-      setManualName("");
-      setManualWest("");
-      setManualSouth("");
-      setManualEast("");
-      setManualNorth("");
-      return;
-    }
-
-    setManualName(selection.name ?? "");
-    setManualWest(selection.bounds.west.toFixed(4));
-    setManualSouth(selection.bounds.south.toFixed(4));
-    setManualEast(selection.bounds.east.toFixed(4));
-    setManualNorth(selection.bounds.north.toFixed(4));
-  }, []);
-
-  const clearAoi = useCallback(() => {
-    setAoiSelections([]);
-    setActiveAoiId(null);
-    setAoiError(null);
-    setAoiIntelReport(null);
-    setAoiTool("idle");
-    populateManualForm(null);
-    drawRef.current?.clear();
-    drawRef.current?.setMode("select");
-  }, [populateManualForm]);
-
-  const applyAoiSelection = useCallback((selection: AoiSelection, replaceId?: string | null) => {
-    setAoiSelections((current) => {
-      if (replaceId) {
-        return current.map((item) => (item.id === replaceId ? selection : item));
-      }
-
-      return [selection, ...current];
-    });
-    setActiveAoiId(selection.id);
-    setAoiError(null);
-    setAoiIntelReport(null);
-    setAoiTool("idle");
-    populateManualForm(selection);
-
-    drawRef.current?.clear();
-    drawRef.current?.setMode("select");
-  }, [populateManualForm]);
-
-  useEffect(() => {
-    populateManualForm(activeAoi);
-  }, [activeAoi, populateManualForm]);
 
   const closePopup = useCallback(() => {
     popupRef.current?.remove();
@@ -809,7 +713,6 @@ export default function MapView({
       }
 
       closePopup();
-
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         closeOnMove: false,
@@ -832,7 +735,6 @@ export default function MapView({
       }
 
       closePopup();
-
       popupRef.current = new maplibregl.Popup({
         closeButton: true,
         closeOnMove: false,
@@ -882,11 +784,13 @@ export default function MapView({
         modes: [
           new TerraDrawPolygonMode(),
           new TerraDrawRectangleMode(),
+          new TerraDrawCircleMode(),
+          new TerraDrawFreehandMode(),
           new TerraDrawSelectMode(),
         ],
       });
 
-      draw.on("finish", async (featureId) => {
+      draw.on("finish", (featureId) => {
         const feature = draw.getSnapshotFeature(featureId);
         if (!feature) {
           return;
@@ -897,18 +801,19 @@ export default function MapView({
           return;
         }
 
-        try {
-          const selection = await normalizeAoi({
-            mode: getAoiModeFromFeature(feature),
-            geometry,
-            name: manualNameRef.current.trim() || undefined,
-          });
-          applyAoiSelection(selection);
-        } catch (error) {
-          setAoiError(
-            error instanceof Error ? error.message : "Unable to create area of interest.",
-          );
+        if (drawModeRef.current === "edit" && selectedAoiRef.current?.id === String(featureId)) {
+          replaceAoiGeometry(selectedAoiRef.current.id, geometry);
+          setDrawMode("idle");
+          draw.clear();
+          return;
         }
+
+        addAoiFromGeometry({
+          geometry,
+          shapeType: shapeTypeFromFeature(feature),
+        });
+        setDrawMode("idle");
+        draw.clear();
       });
 
       draw.start();
@@ -922,7 +827,7 @@ export default function MapView({
     };
 
     const handleClick = async (event: maplibregl.MapMouseEvent) => {
-      if (aoiToolRef.current !== "idle") {
+      if (drawModeRef.current !== "idle") {
         return;
       }
 
@@ -935,7 +840,7 @@ export default function MapView({
           WEATHER_ICON_LAYER_ID,
           AOI_FILL_LAYER_ID,
           AOI_OUTLINE_LAYER_ID,
-          AOI_ACTIVE_OUTLINE_LAYER_ID,
+          AOI_SELECTED_OUTLINE_LAYER_ID,
         ],
       });
 
@@ -958,7 +863,10 @@ export default function MapView({
         return;
       }
 
-      if (topFeature.layer.id === WEATHER_CIRCLE_LAYER_ID || topFeature.layer.id === WEATHER_ICON_LAYER_ID) {
+      if (
+        topFeature.layer.id === WEATHER_CIRCLE_LAYER_ID ||
+        topFeature.layer.id === WEATHER_ICON_LAYER_ID
+      ) {
         const match = weatherGeoJsonRef.current.features.find((feature) => feature.id === topFeature.id);
         if (match) {
           openWeatherPopup(match);
@@ -969,7 +877,7 @@ export default function MapView({
       if (
         topFeature.layer.id === AOI_FILL_LAYER_ID ||
         topFeature.layer.id === AOI_OUTLINE_LAYER_ID ||
-        topFeature.layer.id === AOI_ACTIVE_OUTLINE_LAYER_ID
+        topFeature.layer.id === AOI_SELECTED_OUTLINE_LAYER_ID
       ) {
         const aoiId =
           typeof topFeature.properties?.id === "string"
@@ -979,9 +887,7 @@ export default function MapView({
               : null;
 
         if (aoiId) {
-          setActiveAoiId(aoiId);
-          setAoiError(null);
-          setAoiIntelReport(null);
+          selectAoi(aoiId);
         }
         return;
       }
@@ -999,18 +905,19 @@ export default function MapView({
     };
 
     const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
-      const isInteractive = map.queryRenderedFeatures(event.point, {
-        layers: [
-          RESULTS_CLUSTER_LAYER_ID,
-          RESULTS_LAYER_ID,
-          RESULTS_PLAIN_LAYER_ID,
-          WEATHER_CIRCLE_LAYER_ID,
-          WEATHER_ICON_LAYER_ID,
-          AOI_FILL_LAYER_ID,
-          AOI_OUTLINE_LAYER_ID,
-          AOI_ACTIVE_OUTLINE_LAYER_ID,
-        ],
-      }).length > 0;
+      const isInteractive =
+        map.queryRenderedFeatures(event.point, {
+          layers: [
+            RESULTS_CLUSTER_LAYER_ID,
+            RESULTS_LAYER_ID,
+            RESULTS_PLAIN_LAYER_ID,
+            WEATHER_CIRCLE_LAYER_ID,
+            WEATHER_ICON_LAYER_ID,
+            AOI_FILL_LAYER_ID,
+            AOI_OUTLINE_LAYER_ID,
+            AOI_SELECTED_OUTLINE_LAYER_ID,
+          ],
+        }).length > 0;
 
       map.getCanvas().style.cursor = isInteractive ? "pointer" : "";
     };
@@ -1054,7 +961,7 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
     };
-  }, [activeBasemap, applyAoiSelection, closePopup, normalizeAoi, onSelect, openWeatherPopup, resultsGeoJson]);
+  }, [activeBasemap, addAoiFromGeometry, closePopup, onSelect, openWeatherPopup, replaceAoiGeometry, resultsGeoJson, selectAoi]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1065,26 +972,14 @@ export default function MapView({
     ensureSourcesAndLayers(map);
     asGeoJSONSource(map, RESULTS_SOURCE_ID)?.setData(resultsGeoJson);
     asGeoJSONSource(map, RESULTS_CLUSTER_SOURCE_ID)?.setData(resultsGeoJson);
-    map.setLayoutProperty(
-      RESULTS_CLUSTER_LAYER_ID,
-      "visibility",
-      showClusters ? "visible" : "none",
-    );
+    map.setLayoutProperty(RESULTS_CLUSTER_LAYER_ID, "visibility", showClusters ? "visible" : "none");
     map.setLayoutProperty(
       RESULTS_CLUSTER_COUNT_LAYER_ID,
       "visibility",
       showClusters ? "visible" : "none",
     );
-    map.setLayoutProperty(
-      RESULTS_LAYER_ID,
-      "visibility",
-      showClusters ? "visible" : "none",
-    );
-    map.setLayoutProperty(
-      RESULTS_PLAIN_LAYER_ID,
-      "visibility",
-      showClusters ? "none" : "visible",
-    );
+    map.setLayoutProperty(RESULTS_LAYER_ID, "visibility", showClusters ? "visible" : "none");
+    map.setLayoutProperty(RESULTS_PLAIN_LAYER_ID, "visibility", showClusters ? "none" : "visible");
   }, [resultsGeoJson, showClusters]);
 
   useEffect(() => {
@@ -1163,119 +1058,131 @@ export default function MapView({
       return;
     }
 
-    if (aoiTool === "polygon") {
-      setAoiError(null);
+    if (drawMode === "polygon") {
       draw.clear();
       draw.setMode("polygon");
       return;
     }
 
-    if (aoiTool === "bbox") {
-      setAoiError(null);
+    if (drawMode === "rectangle") {
       draw.clear();
       draw.setMode("rectangle");
       return;
     }
 
-    draw.setMode("select");
-  }, [aoiTool]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !activeAoi) {
+    if (drawMode === "circle") {
+      draw.clear();
+      draw.setMode("circle");
       return;
     }
 
-    map.fitBounds(aoiBoundsToMapLibre(activeAoi.bounds), {
+    if (drawMode === "freehand") {
+      draw.clear();
+      draw.setMode("freehand");
+      return;
+    }
+
+    if (drawMode === "edit") {
+      draw.clear();
+
+      if (!selectedAoi) {
+        draw.setMode("select");
+        return;
+      }
+
+      draw.addFeatures([
+        {
+          type: "Feature",
+          id: selectedAoi.id,
+          geometry: selectedAoi.geometry,
+          properties: {
+            mode: terraModeFromShapeType(selectedAoi.shapeType),
+          },
+        } as GeoJSONStoreFeatures,
+      ]);
+      draw.setMode("select");
+      draw.selectFeature(selectedAoi.id);
+      return;
+    }
+
+    draw.clear();
+    draw.setMode("select");
+  }, [drawMode, selectedAoi]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedAoi) {
+      return;
+    }
+
+    map.fitBounds(aoiBoundsToMapLibre(selectedAoi), {
       padding: 72,
       duration: 650,
       maxZoom: 12,
     });
-  }, [activeAoi]);
+  }, [selectedAoi]);
 
-  const handleBasemapChange = useCallback((nextBasemap: BasemapKey) => {
-    setActiveBasemap(nextBasemap);
-    writeStoredBasemap(nextBasemap);
-    closePopup();
-    mapRef.current?.setStyle(BASEMAPS[nextBasemap].style);
-  }, [closePopup]);
+  const handleBasemapChange = useCallback(
+    (nextBasemap: BasemapKey) => {
+      setActiveBasemap(nextBasemap);
+      writeStoredBasemap(nextBasemap);
+      closePopup();
+      mapRef.current?.setStyle(BASEMAPS[nextBasemap].style);
+    },
+    [closePopup],
+  );
 
-  const handleManualApply = useCallback(async () => {
-    setAoiError(null);
-
-    const bounds: AoiBounds = {
-      west: Number(manualWest),
-      south: Number(manualSouth),
-      east: Number(manualEast),
-      north: Number(manualNorth),
-    };
-
-    try {
-      const selection = await normalizeAoi({
-        mode: "manual",
-        bounds,
-        name: manualName.trim() || undefined,
-      });
-      applyAoiSelection(selection, activeAoiId);
-    } catch (error) {
-      setAoiError(
-        error instanceof Error ? error.message : "Unable to create area of interest.",
-      );
-    }
-  }, [activeAoiId, applyAoiSelection, manualEast, manualName, manualNorth, manualSouth, manualWest, normalizeAoi]);
-
-  const handleRemoveAoi = useCallback((id: string) => {
-    setAoiSelections((current) => {
-      const next = current.filter((selection) => selection.id !== id);
-      if (activeAoiIdRef.current === id) {
-        setActiveAoiId(next[0]?.id ?? null);
-      }
-      return next;
-    });
-    setAoiError(null);
-    setAoiIntelReport(null);
-  }, []);
-
-  const handleCreateNewManual = useCallback(() => {
-    setActiveAoiId(null);
-    setAoiError(null);
-    setAoiIntelReport(null);
-    populateManualForm(null);
-  }, [populateManualForm]);
-
-  const handleFetchAreaIntel = useCallback(async () => {
-    if (!activeAoi) {
+  const handleFetchSelectedData = useCallback(async () => {
+    if (!selectedAoi) {
       return;
     }
 
-    setAoiLoadingIntel(true);
-    setAoiIntelReport(null);
+    setIsFetchingData(true);
+    setFetchMessage(null);
 
     try {
-      const response = await fetch("/api/aoi/intel", {
+      const response = await fetch("/api/intel", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ aoi: activeAoi }),
+        body: JSON.stringify({
+          aoiId: selectedAoi.id,
+          geometry: selectedAoi.geometry,
+          bbox: [
+            selectedAoi.bounds.west,
+            selectedAoi.bounds.south,
+            selectedAoi.bounds.east,
+            selectedAoi.bounds.north,
+          ],
+          filters: selectedAoi.selectedFilters,
+        }),
       });
 
-      const data = (await response.json()) as AreaIntelReport | { error?: string };
+      const data = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) {
-        throw new Error(
-          "error" in data && typeof data.error === "string"
-            ? data.error
-            : "Unable to fetch area intelligence.",
-        );
+        throw new Error(data.error || "Unable to fetch selected data.");
       }
 
-      setAoiIntelReport(data as AreaIntelReport);
-    } catch {
-      setAoiError("Unable to fetch area intelligence.");
+      setFetchMessage(data.message ?? "Selected data request sent.");
+    } catch (error) {
+      setFetchMessage(error instanceof Error ? error.message : "Unable to fetch selected data.");
     } finally {
-      setAoiLoadingIntel(false);
+      setIsFetchingData(false);
     }
-  }, [activeAoi]);
+  }, [selectedAoi]);
+
+  const handleClearDrawing = useCallback(() => {
+    setDrawMode("idle");
+    drawRef.current?.clear();
+  }, []);
+
+  const handleClearAllAois = useCallback(() => {
+    clearAllAois();
+    setDrawMode("idle");
+    drawRef.current?.clear();
+    setFetchMessage(null);
+  }, [clearAllAois]);
 
   return (
     <>
@@ -1309,243 +1216,23 @@ export default function MapView({
             </span>
           </label>
 
-          <section className="aoi-panel" aria-label="Area of Interest">
-            <div className="aoi-panel-header">
-              <div className="aoi-panel-title">Area of Interest</div>
-              <div className="aoi-panel-description">
-                Define the map area for emergency-response and open-source area analysis.
-              </div>
-            </div>
-
-            <div className="aoi-tool-grid">
-              <button
-                type="button"
-                className={`aoi-tool-button ${aoiTool === "polygon" ? "active" : ""}`}
-                onClick={() => setAoiTool((current) => (current === "polygon" ? "idle" : "polygon"))}
-              >
-                Draw polygon
-              </button>
-              <button
-                type="button"
-                className={`aoi-tool-button ${aoiTool === "bbox" ? "active" : ""}`}
-                onClick={() => setAoiTool((current) => (current === "bbox" ? "idle" : "bbox"))}
-              >
-                Draw rectangle
-              </button>
-              <button
-                type="button"
-                className="aoi-clear-button"
-                onClick={clearAoi}
-                disabled={aoiSelections.length === 0 && aoiTool === "idle"}
-              >
-                Clear all areas
-              </button>
-            </div>
-
-            <div className="aoi-list-header">
-              <span className="aoi-list-title">Saved areas</span>
-              <button type="button" className="aoi-list-action" onClick={handleCreateNewManual}>
-                New manual
-              </button>
-            </div>
-
-            {aoiSelections.length > 0 ? (
-              <div className="aoi-list">
-                {aoiSelections.map((selection) => (
-                  <div
-                    key={selection.id}
-                    className={`aoi-list-item ${selection.id === activeAoiId ? "active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="aoi-list-select"
-                      onClick={() => setActiveAoiId(selection.id)}
-                    >
-                      <span className="aoi-list-name">{selection.name ?? "Unnamed area"}</span>
-                      <span className="aoi-list-meta">
-                        {selection.mode} · {selection.areaSqKm ? `${selection.areaSqKm.toFixed(1)} km²` : "n/a"}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="aoi-list-delete"
-                      onClick={() => handleRemoveAoi(selection.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="aoi-status-message">
-                No saved areas yet. Draw one on the map or enter coordinates manually.
-              </div>
-            )}
-
-            <div className="aoi-manual-form">
-              <input
-                type="text"
-                className="aoi-input"
-                placeholder="Name"
-                value={manualName}
-                onChange={(event) => setManualName(event.target.value)}
-              />
-              <div className="aoi-coordinate-grid">
-                <input
-                  type="number"
-                  step="any"
-                  className="aoi-input"
-                  placeholder="West"
-                  value={manualWest}
-                  onChange={(event) => setManualWest(event.target.value)}
-                />
-                <input
-                  type="number"
-                  step="any"
-                  className="aoi-input"
-                  placeholder="South"
-                  value={manualSouth}
-                  onChange={(event) => setManualSouth(event.target.value)}
-                />
-                <input
-                  type="number"
-                  step="any"
-                  className="aoi-input"
-                  placeholder="East"
-                  value={manualEast}
-                  onChange={(event) => setManualEast(event.target.value)}
-                />
-                <input
-                  type="number"
-                  step="any"
-                  className="aoi-input"
-                  placeholder="North"
-                  value={manualNorth}
-                  onChange={(event) => setManualNorth(event.target.value)}
-                />
-              </div>
-              <button type="button" className="aoi-apply-button" onClick={handleManualApply}>
-                {activeAoiId ? "Update area" : "Add area"}
-              </button>
-            </div>
-
-            {aoiError && <div className="aoi-status-error">{aoiError}</div>}
-            {aoiTool !== "idle" && (
-              <div className="aoi-status-message">
-                {aoiTool === "polygon"
-                  ? "Polygon mode active. Click to place vertices and double-click to finish the shape."
-                  : "Rectangle mode active. Drag on the map to create a bounding box."}
-              </div>
-            )}
-
-            {activeAoi && (
-              <div className="aoi-meta">
-                <div className="aoi-meta-row">
-                  <span className="aoi-meta-label">Mode</span>
-                  <span className="aoi-meta-value">{activeAoi.mode}</span>
-                </div>
-                <div className="aoi-meta-row">
-                  <span className="aoi-meta-label">BBox</span>
-                  <span className="aoi-meta-value">
-                    {activeAoi.bounds.west.toFixed(3)}, {activeAoi.bounds.south.toFixed(3)} to{" "}
-                    {activeAoi.bounds.east.toFixed(3)}, {activeAoi.bounds.north.toFixed(3)}
-                  </span>
-                </div>
-                <div className="aoi-meta-row">
-                  <span className="aoi-meta-label">Center</span>
-                  <span className="aoi-meta-value">
-                    {activeAoi.center.lat.toFixed(4)}, {activeAoi.center.lon.toFixed(4)}
-                  </span>
-                </div>
-                <div className="aoi-meta-row">
-                  <span className="aoi-meta-label">Area</span>
-                  <span className="aoi-meta-value">
-                    {activeAoi.areaSqKm ? `${activeAoi.areaSqKm.toFixed(1)} km²` : "n/a"}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="aoi-fetch-button"
-                  onClick={handleFetchAreaIntel}
-                  disabled={aoiLoadingIntel}
-                >
-                  {aoiLoadingIntel ? "Fetching…" : "Fetch area intelligence"}
-                </button>
-                {aoiIntelReport && (
-                  <>
-                    <div className="aoi-status-message">{aoiIntelReport.message}</div>
-
-                    <div className="aoi-intel-overview">
-                      <div className="aoi-intel-stat">
-                        <span className="aoi-intel-stat-label">Features</span>
-                        <span className="aoi-intel-stat-value">{aoiIntelReport.totals.features}</span>
-                      </div>
-                      <div className="aoi-intel-stat">
-                        <span className="aoi-intel-stat-label">Sources OK</span>
-                        <span className="aoi-intel-stat-value">{aoiIntelReport.totals.sourcesSuccessful}</span>
-                      </div>
-                      <div className="aoi-intel-stat">
-                        <span className="aoi-intel-stat-label">Failures</span>
-                        <span className="aoi-intel-stat-value">{aoiIntelReport.totals.sourcesFailed}</span>
-                      </div>
-                    </div>
-
-                    {aoiIntelReport.highlights.length > 0 && (
-                      <div className="aoi-intel-section">
-                        <div className="aoi-intel-section-title">Highlights</div>
-                        <div className="aoi-highlight-list">
-                          {aoiIntelReport.highlights.map((highlight) => (
-                            <div key={highlight.id} className="aoi-highlight-card">
-                              <div className="aoi-highlight-title">{highlight.title}</div>
-                              <div className="aoi-highlight-detail">{highlight.detail}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {Object.keys(aoiIntelReport.categoryCounts).length > 0 && (
-                      <div className="aoi-intel-section">
-                        <div className="aoi-intel-section-title">Category totals</div>
-                        <div className="aoi-category-grid">
-                          {Object.entries(aoiIntelReport.categoryCounts).map(([category, count]) => (
-                            <div key={category} className="aoi-category-pill">
-                              <span>{category}</span>
-                              <strong>{count}</strong>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="aoi-intel-section">
-                      <div className="aoi-intel-section-title">Source status</div>
-                      <div className="aoi-source-list">
-                        {aoiIntelReport.sourceSummaries.map((source) => (
-                          <div key={source.sourceId} className={`aoi-source-card ${source.status}`}>
-                            <div className="aoi-source-head">
-                              <span className="aoi-source-name">{source.label}</span>
-                              <span className={`aoi-source-badge ${source.status}`}>{source.status}</span>
-                            </div>
-                            <div className="aoi-source-meta">
-                              {source.category} · {source.featureCount} feature{source.featureCount === 1 ? "" : "s"}
-                            </div>
-                            {source.note && <div className="aoi-source-note">{source.note}</div>}
-                            {source.error && <div className="aoi-source-error">{source.error}</div>}
-                            {source.sampleNames.length > 0 && (
-                              <div className="aoi-source-note">
-                                Sample: {source.sampleNames.join(", ")}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </section>
+          <AoiPanel
+            aois={aois}
+            selectedAoi={selectedAoi}
+            selectedAoiId={selectedAoiId}
+            drawMode={drawMode}
+            loading={isFetchingData}
+            fetchMessage={fetchMessage}
+            onSetDrawMode={setDrawMode}
+            onSelectAoi={selectAoi}
+            onClearDrawing={handleClearDrawing}
+            onClearAllAois={handleClearAllAois}
+            onDeleteAoi={deleteAoi}
+            onUpdateAoi={updateAoi}
+            onAddComment={addComment}
+            onToggleFilter={toggleFilter}
+            onFetchSelectedData={handleFetchSelectedData}
+          />
         </div>
 
         <div ref={containerRef} className="map-canvas" />
