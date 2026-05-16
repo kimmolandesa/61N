@@ -14,7 +14,7 @@ export function normalizeIntelFeatureProperties(
 ): SectionIntelFeatureProperties {
   const category = asString(properties?.category) ?? "Unknown category";
   const source = asString(properties?.source) ?? "Unknown source";
-  const name = asString(properties?.name) ?? `${category} from ${source}`;
+  const name = asString(properties?.name) ?? `${category} feature`;
   const description =
     asString(properties?.description) ??
     asString(properties?.summary) ??

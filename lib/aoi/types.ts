@@ -1,3 +1,5 @@
+import type { IntelCategory } from "@/lib/intel/categories";
+
 export type AoiShapeType =
   | "polygon"
   | "rectangle"
@@ -13,19 +15,7 @@ export type AoiDrawMode =
   | "measure"
   | "edit";
 
-export type AoiDataFilter =
-  | "terrain"
-  | "weather"
-  | "infrastructure"
-  | "roads"
-  | "bridges"
-  | "population"
-  | "telecom"
-  | "satellite"
-  | "healthcare"
-  | "power"
-  | "water"
-  | "logistics";
+export type AoiDataFilter = IntelCategory;
 
 export interface SectionIntelFeatureProperties {
   sectionId?: string;
@@ -41,11 +31,18 @@ export interface SectionIntelFeatureProperties {
 export type SectionIntelFeatureCollection =
   GeoJSON.FeatureCollection<GeoJSON.Geometry, SectionIntelFeatureProperties>;
 
+export interface SectionIntelSummary {
+  total: number;
+  byCategory: Record<string, number>;
+  bySource: Record<string, number>;
+}
+
 export interface AoiIntelState {
   status: "idle" | "loading" | "success" | "error";
   error?: string;
   fetchedAt?: string;
   featureCollection?: SectionIntelFeatureCollection;
+  summary?: SectionIntelSummary;
 }
 
 export interface AoiComment {

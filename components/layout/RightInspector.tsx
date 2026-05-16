@@ -6,7 +6,6 @@ import type { AoiSelection } from "@/lib/aoi/types";
 interface RightInspectorProps {
   selectedAoi: AoiSelection | null;
   onUpdateAoi: (id: string, patch: Partial<AoiSelection>) => void;
-  onFetchSelectedData: () => void;
 }
 
 export default function RightInspector(props: RightInspectorProps) {

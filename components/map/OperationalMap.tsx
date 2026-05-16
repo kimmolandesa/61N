@@ -582,6 +582,7 @@ export default function OperationalMap({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const initialBasemapRef = useRef(activeBasemap);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const drawRef = useRef<TerraDraw | null>(null);
   const lastAppliedBasemap = useRef<BaseMapId>(activeBasemap);
@@ -854,7 +855,7 @@ export default function OperationalMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: BASE_MAPS_BY_ID[activeBasemap].style,
+      style: BASE_MAPS_BY_ID[initialBasemapRef.current].style,
       center: DEFAULT_CENTER,
       zoom: DEFAULT_ZOOM,
       attributionControl: {},
@@ -1288,7 +1289,7 @@ export default function OperationalMap({
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selectedAoi) {
+    if (!map || !selectedAoi || fitToSelectedAoiToken === 0) {
       return;
     }
 

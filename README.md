@@ -2,12 +2,14 @@
 
 **Operational geospatial intelligence for Finland.** Fuses 50+ live open data sources into a drawable, filterable, time-comparable map for analysts, planners, and operators built with Next.js, TypeScript, MapLibre GL JS, and Terra Draw.
 
-The application is designed around a document-editor-style workflow where:
+The application is designed around an intuitive document-editor-style workflow where:
 
 - the map is the central working canvas
 - users define one or more Areas of Interest (AOI) as `Sections`
 - each Section maintains its own notes, geometry, filters, and fetched intelligence
 - intelligence is fetched through backend API routes and rendered back onto the selected Section
+
+This solution enables faster resource planning, more informed decisions and doesn't rely solely on human perceived observations of the 
 
 This repository currently focuses on frontend-heavy spatial analysis workflows backed by a custom intelligence API layer.
 

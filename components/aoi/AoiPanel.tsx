@@ -6,30 +6,26 @@ import type { AoiSelection } from "@/lib/aoi/types";
 interface AoiPanelProps {
   selectedAoi: AoiSelection | null;
   onUpdateAoi: (id: string, patch: Partial<AoiSelection>) => void;
-  onFetchSelectedData: () => void;
 }
 
 export default function AoiPanel({
   selectedAoi,
   onUpdateAoi,
-  onFetchSelectedData,
 }: AoiPanelProps) {
-  const intelCounts = useMemo(() => {
-    if (!selectedAoi?.intel.featureCollection) {
-      return [];
-    }
-
-    const counts = new Map<string, number>();
-    for (const feature of selectedAoi.intel.featureCollection.features) {
-      const category =
-        typeof feature.properties?.category === "string"
-          ? feature.properties.category
-          : "Unknown category";
-      counts.set(category, (counts.get(category) ?? 0) + 1);
-    }
-
-    return Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [selectedAoi]);
+  const intelCounts = useMemo(
+    () =>
+      Object.entries(selectedAoi?.intel.summary?.byCategory ?? {}).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    [selectedAoi],
+  );
+  const sourceCounts = useMemo(
+    () =>
+      Object.entries(selectedAoi?.intel.summary?.bySource ?? {}).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    [selectedAoi],
+  );
 
   if (!selectedAoi) {
     return (
@@ -107,56 +103,75 @@ export default function AoiPanel({
         </dl>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <button
-          type="button"
-          onClick={onFetchSelectedData}
-          disabled={selectedAoi.intel.status === "loading"}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {selectedAoi.intel.status === "loading" ? "Fetching…" : "Fetch Intelligence"}
-        </button>
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Intelligence Status</h3>
+          <p className="text-xs text-slate-500">
+            Runtime status and summary for the currently selected section.
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          Status: <span className="font-medium capitalize">{selectedAoi.intel.status}</span>
+        </div>
         {selectedAoi.intel.status === "error" && selectedAoi.intel.error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {selectedAoi.intel.error}
           </div>
         ) : null}
-      </section>
-
-      {selectedAoi.intel.status === "success" && (
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Fetched Intelligence</h3>
-            <p className="text-xs text-slate-500">
-              {selectedAoi.intel.featureCollection?.features.length ?? 0} overlay feature
-              {(selectedAoi.intel.featureCollection?.features.length ?? 0) === 1 ? "" : "s"} available for this section.
-            </p>
+        {selectedAoi.intel.fetchedAt ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            Fetched {new Date(selectedAoi.intel.fetchedAt).toLocaleString()}
           </div>
-          {selectedAoi.intel.fetchedAt ? (
+        ) : null}
+        {selectedAoi.intel.status === "success" ? (
+          <>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              Fetched {new Date(selectedAoi.intel.fetchedAt).toLocaleString()}
+              Total features: <span className="font-medium">{selectedAoi.intel.summary?.total ?? 0}</span>
             </div>
-          ) : null}
-          {intelCounts.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2">
-              {intelCounts.map(([category, count]) => (
-                <div
-                  key={category}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <span className="font-medium capitalize text-slate-700">{category}</span>
-                  <span className="text-slate-900">{count}</span>
+            {intelCounts.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  By category
                 </div>
-              ))}
-            </div>
-          ) : null}
-          {!(selectedAoi.intel.featureCollection?.features.length) ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              No data returned for selected sources.
-            </div>
-          ) : null}
-        </section>
-      )}
+                <div className="grid grid-cols-1 gap-2">
+                  {intelCounts.map(([category, count]) => (
+                    <div
+                      key={category}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium text-slate-700">{category}</span>
+                      <span className="text-slate-900">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {sourceCounts.length > 0 ? (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  By source
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {sourceCounts.map(([source, count]) => (
+                    <div
+                      key={source}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium text-slate-700">{source}</span>
+                      <span className="text-slate-900">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {!(selectedAoi.intel.summary?.total) ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                No data returned for selected sources.
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </section>
     </div>
   );
 }

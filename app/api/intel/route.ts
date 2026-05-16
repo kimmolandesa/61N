@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { circle as turfCircle } from "@turf/turf";
 import type { AoiDataFilter } from "@/lib/aoi/types";
 import type { SectionIntelResponse, SectionIntelSourceSummary } from "@/lib/aoi/sectionIntel";
+import { INTEL_CATEGORIES } from "@/lib/intel/categories";
 import type { IntelFeature, IntelGeometry } from "@/lib/intel/types";
 
 export const runtime = "nodejs";
@@ -9,20 +10,7 @@ export const maxDuration = 60;
 
 const API_BASE_URL = "https://api.kebabkartta.fi";
 
-const VALID_FILTERS: AoiDataFilter[] = [
-  "terrain",
-  "weather",
-  "infrastructure",
-  "roads",
-  "bridges",
-  "population",
-  "telecom",
-  "satellite",
-  "healthcare",
-  "power",
-  "water",
-  "logistics",
-];
+const VALID_FILTERS: AoiDataFilter[] = INTEL_CATEGORIES.map((category) => category.id);
 
 type GeoJsonFeatureCollection = GeoJSON.FeatureCollection<
   GeoJSON.Geometry,
@@ -54,6 +42,10 @@ function isFilters(value: unknown): value is AoiDataFilter[] {
 
 function bboxToQuery(bbox: [number, number, number, number]): string {
   return `${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}`;
+}
+
+function bboxCenter(bbox: [number, number, number, number]): [number, number] {
+  return [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
 }
 
 function isIntelGeometry(geometry: GeoJSON.Geometry): geometry is IntelGeometry {
@@ -120,6 +112,38 @@ function summary(args: {
   return args;
 }
 
+function makeCenterPointFeature(args: {
+  id: string;
+  name: string;
+  source: string;
+  category: IntelFeature["category"];
+  bbox: [number, number, number, number];
+  properties: Record<string, unknown>;
+}): IntelFeature {
+  const [lon, lat] = bboxCenter(args.bbox);
+
+  return {
+    id: args.id,
+    name: args.name,
+    source: args.source,
+    category: args.category,
+    geometry: {
+      type: "Point",
+      coordinates: [lon, lat],
+    },
+    properties: args.properties,
+  };
+}
+
+function hasTextMatch(properties: Record<string, unknown>, terms: string[]): boolean {
+  const haystack = Object.values(properties)
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return terms.some((term) => haystack.includes(term));
+}
+
 async function fetchWeather(
   bbox: [number, number, number, number],
 ): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary; notes: string[] }> {
@@ -148,6 +172,7 @@ async function fetchWeather(
         },
         properties: {
           ...item,
+          category: "weather",
           conditionLabel: "Current weather",
           forecast: [],
         },
@@ -169,6 +194,40 @@ async function fetchWeather(
   };
 }
 
+async function fetchVisibility(
+  bbox: [number, number, number, number],
+): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary; notes: string[] }> {
+  const impact = await fetchJson<Record<string, unknown>>(`/api/weather/impact?bbox=${bboxToQuery(bbox)}`);
+  const reason = typeof impact.reason === "string" ? impact.reason : "Weather impact summary available.";
+
+  return {
+    features: [
+      makeCenterPointFeature({
+        id: "visibility-summary",
+        name: "Visibility summary",
+        source: "weather-impact",
+        category: "weather",
+        bbox,
+        properties: {
+          ...impact,
+          category: "visibility",
+          source: "weather-impact",
+          description: reason,
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    ],
+    summary: summary({
+      sourceId: "visibility",
+      label: "Visibility",
+      status: "success",
+      featureCount: 1,
+      message: reason,
+    }),
+    notes: [reason],
+  };
+}
+
 async function fetchTerrain(
   bbox: [number, number, number, number],
 ): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
@@ -179,6 +238,10 @@ async function fetchTerrain(
     category: "terrain",
     idPrefix: "terrain",
     defaultName: "Terrain cell",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "terrain",
+    }),
   });
   return {
     features,
@@ -191,12 +254,123 @@ async function fetchTerrain(
   };
 }
 
+async function fetchTerrainVariant(args: {
+  filter: "landCover" | "forestDensity";
+  bbox: [number, number, number, number];
+}): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
+  const collection = await fetchJson<GeoJsonFeatureCollection>(`/api/terrain/cover?bbox=${bboxToQuery(args.bbox)}`);
+  const filteredCollection: GeoJsonFeatureCollection = {
+    ...collection,
+    features:
+      args.filter === "forestDensity"
+        ? collection.features.filter((feature) =>
+            hasTextMatch(feature.properties ?? {}, ["forest", "wood", "tree", "conifer", "broadleaf"]),
+          )
+        : collection.features,
+  };
+
+  const features = normalizeFeatureCollection({
+    collection: filteredCollection,
+    source: args.filter,
+    category: "terrain",
+    idPrefix: args.filter,
+    defaultName: args.filter === "landCover" ? "Land cover cell" : "Forest density cell",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: args.filter,
+    }),
+  });
+
+  return {
+    features,
+    summary: summary({
+      sourceId: args.filter,
+      label: args.filter === "landCover" ? "Land cover" : "Forest density",
+      status: "success",
+      featureCount: features.length,
+    }),
+  };
+}
+
+async function fetchTopography(
+  bbox: [number, number, number, number],
+): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
+  const collection = await fetchJson<GeoJsonFeatureCollection>(`/api/terrain/soil?bbox=${bboxToQuery(bbox)}`);
+  const features = normalizeFeatureCollection({
+    collection,
+    source: "topography",
+    category: "terrain",
+    idPrefix: "topography",
+    defaultName: "Soil deposit",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "topography",
+      description:
+        typeof properties.deposit_type === "string"
+          ? `Soil deposit: ${properties.deposit_type}`
+          : "Topographic soil unit",
+    }),
+  });
+
+  return {
+    features,
+    summary: summary({
+      sourceId: "topography",
+      label: "Topography",
+      status: "success",
+      featureCount: features.length,
+    }),
+  };
+}
+
+async function fetchElevation(
+  bbox: [number, number, number, number],
+): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
+  const [lon, lat] = bboxCenter(bbox);
+  const data = await fetchJson<{
+    lat?: number;
+    lon?: number;
+    elevation_m?: number;
+  }>(`/api/terrain/elevation?lat=${lat}&lon=${lon}`);
+
+  const feature = makeCenterPointFeature({
+    id: "elevation-centre",
+    name: "Section centre elevation",
+    source: "elevation",
+    category: "terrain",
+    bbox,
+    properties: {
+      category: "elevation",
+      source: "elevation",
+      elevation_m: typeof data.elevation_m === "number" ? data.elevation_m : null,
+      lat: data.lat ?? lat,
+      lon: data.lon ?? lon,
+      description:
+        typeof data.elevation_m === "number"
+          ? `Elevation at the selected section centre is ${data.elevation_m.toFixed(1)} m.`
+          : "Elevation summary for the selected section centre.",
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  return {
+    features: [feature],
+    summary: summary({
+      sourceId: "elevation",
+      label: "Elevation",
+      status: "success",
+      featureCount: 1,
+    }),
+  };
+}
+
 async function fetchFeatureLayer(args: {
   filter: AoiDataFilter;
   layer: "all" | "military" | "roads" | "water" | "buildings" | "infrastructure";
   bbox: [number, number, number, number];
   source: string;
   defaultName: string;
+  category?: IntelFeature["category"];
   propertyFilter?: (properties: Record<string, unknown>) => boolean;
 }): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
   const collection = await fetchJson<GeoJsonFeatureCollection>(
@@ -213,9 +387,13 @@ async function fetchFeatureLayer(args: {
   const features = normalizeFeatureCollection({
     collection: filteredCollection,
     source: args.source,
-    category: "infrastructure",
+    category: args.category ?? "infrastructure",
     idPrefix: args.filter,
     defaultName: args.defaultName,
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: args.filter,
+    }),
   });
 
   return {
@@ -239,6 +417,10 @@ async function fetchBridges(
     category: "infrastructure",
     idPrefix: "bridges",
     defaultName: "Bridge",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "bridges",
+    }),
   });
   return {
     features,
@@ -261,6 +443,10 @@ async function fetchPopulation(
     category: "population",
     idPrefix: "population",
     defaultName: "Population cell",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "population",
+    }),
   });
   return {
     features,
@@ -376,27 +562,27 @@ async function fetchTelecom(
 async function fetchSatellites(
   bbox: [number, number, number, number],
 ): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary; notes: string[] }> {
-  const centerLon = (bbox[0] + bbox[2]) / 2;
-  const centerLat = (bbox[1] + bbox[3]) / 2;
+  const [centerLon, centerLat] = bboxCenter(bbox);
   const data = await fetchJson<{
     passes?: Array<Record<string, unknown> & { satellite?: string; type?: string }>;
   }>(`/api/intel/satellites?lat=${centerLat}&lon=${centerLon}&alt_m=0&days=3`);
 
   const passes = data.passes ?? [];
   const features: IntelFeature[] = [
-    {
+    makeCenterPointFeature({
       id: "satellite-passes",
       name: "Satellite pass forecast",
       source: "satellite",
       category: "satellite",
-      geometry: {
-        type: "Point",
-        coordinates: [centerLon, centerLat],
-      },
+      bbox,
       properties: {
+        category: "satellite",
+        source: "satellite",
+        description: `${passes.length} upcoming satellite pass${passes.length === 1 ? "" : "es"} over the selected section centre.`,
+        timestamp: new Date().toISOString(),
         passes,
       },
-    },
+    }),
   ];
 
   return {
@@ -426,9 +612,13 @@ async function fetchSupportNodes(
   const features = normalizeFeatureCollection({
     collection,
     source: args.filter,
-    category: "infrastructure",
+    category: args.filter === "healthcare" ? "infrastructure" : "terrain",
     idPrefix: args.filter,
     defaultName: args.label,
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: args.filter,
+    }),
   });
   return {
     features,
@@ -444,14 +634,61 @@ async function fetchSupportNodes(
 async function fetchLogistics(
   bbox: [number, number, number, number],
 ): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
-  const collection = await fetchJson<GeoJsonFeatureCollection>(`/api/logistics/chokepoints?bbox=${bboxToQuery(bbox)}`);
-  const features = normalizeFeatureCollection({
-    collection,
+  const [chokepoints, restrictions, supportNodes] = await Promise.all([
+    fetchJson<GeoJsonFeatureCollection>(`/api/logistics/chokepoints?bbox=${bboxToQuery(bbox)}`),
+    fetchJson<GeoJsonFeatureCollection>(`/api/logistics/restrictions?bbox=${bboxToQuery(bbox)}`),
+    fetchJson<GeoJsonFeatureCollection>(`/api/logistics/support_nodes?bbox=${bboxToQuery(bbox)}&type=fuel`),
+  ]);
+
+  const chokepointFeatures = normalizeFeatureCollection({
+    collection: chokepoints,
     source: "logistics",
     category: "infrastructure",
-    idPrefix: "logistics",
+    idPrefix: "logistics-chokepoint",
     defaultName: "Chokepoint",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "logistics",
+      description:
+        typeof properties.name === "string"
+          ? `Logistics chokepoint on ${properties.name}`
+          : "Logistics chokepoint",
+    }),
   });
+
+  const restrictionFeatures = normalizeFeatureCollection({
+    collection: restrictions,
+    source: "logistics",
+    category: "infrastructure",
+    idPrefix: "logistics-restriction",
+    defaultName: "Weight restriction",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "logistics",
+      description:
+        typeof properties.combination_t === "number"
+          ? `Weight restriction: combination ${properties.combination_t} t`
+          : "Road restriction segment",
+    }),
+  });
+
+  const supportFeatures = normalizeFeatureCollection({
+    collection: supportNodes,
+    source: "logistics",
+    category: "infrastructure",
+    idPrefix: "logistics-fuel",
+    defaultName: "Fuel support node",
+    propertyMapper: (properties) => ({
+      ...properties,
+      category: "logistics",
+      description:
+        typeof properties.name === "string"
+          ? `Fuel support node: ${properties.name}`
+          : "Fuel support node",
+    }),
+  });
+
+  const features = [...chokepointFeatures, ...restrictionFeatures, ...supportFeatures];
   return {
     features,
     summary: summary({
@@ -470,14 +707,25 @@ async function fetchByFilter(
   switch (filter) {
     case "weather":
       return fetchWeather(bbox);
+    case "visibility":
+      return fetchVisibility(bbox);
     case "terrain":
       return fetchTerrain(bbox);
+    case "topography":
+      return fetchTopography(bbox);
+    case "elevation":
+      return fetchElevation(bbox);
+    case "landCover":
+      return fetchTerrainVariant({ filter, bbox });
+    case "forestDensity":
+      return fetchTerrainVariant({ filter, bbox });
     case "infrastructure":
       return fetchFeatureLayer({
         filter,
         layer: "infrastructure",
         bbox,
         source: "infrastructure",
+        category: "infrastructure",
         defaultName: "Infrastructure",
       });
     case "roads":
@@ -486,7 +734,17 @@ async function fetchByFilter(
         layer: "roads",
         bbox,
         source: "roads",
+        category: "infrastructure",
         defaultName: "Road",
+      });
+    case "water":
+      return fetchFeatureLayer({
+        filter,
+        layer: "water",
+        bbox,
+        source: "water",
+        category: "terrain",
+        defaultName: "Water feature",
       });
     case "bridges":
       return fetchBridges(bbox);
@@ -509,18 +767,24 @@ async function fetchByFilter(
         layer: "infrastructure",
         bbox,
         source: "power",
+        category: "infrastructure",
         defaultName: "Power asset",
         propertyFilter: (properties) => "power" in properties,
       });
-    case "water":
-      return fetchSupportNodes({
-        filter,
-        type: "water",
-        bbox,
-        label: "Water source",
-      });
     case "logistics":
       return fetchLogistics(bbox);
+    case "routes":
+    case "demographics":
+      return {
+        features: [],
+        summary: summary({
+          sourceId: filter,
+          label: filter,
+          status: "error",
+          featureCount: 0,
+          message: "This intelligence category is visible in the UI but not yet supported by the backend.",
+        }),
+      };
     default:
       return {
         features: [],
@@ -538,6 +802,7 @@ async function fetchByFilter(
 export async function POST(request: NextRequest): Promise<NextResponse<SectionIntelResponse | { error: string }>> {
   try {
     const body = (await request.json()) as {
+      sectionId?: unknown;
       aoiId?: unknown;
       geometry?: unknown;
       bbox?: unknown;
@@ -581,6 +846,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<SectionIn
     const notes = jobs.flatMap((job) => job.notes ?? []);
 
     return NextResponse.json({
+      sectionId: typeof body.sectionId === "string" ? body.sectionId : undefined,
       aoiId: body.aoiId,
       requestedFilters: filters,
       bbox,

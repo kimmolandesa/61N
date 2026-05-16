@@ -12,6 +12,7 @@ import { fetchSectionIntel } from "@/lib/intel/client";
 import type { GeoResult, SearchError, SearchResult } from "@/lib/types";
 import type { IntelFeature } from "@/lib/intel/types";
 import { BASE_MAPS, BASE_MAPS_BY_ID, type BaseMapId } from "@/lib/map/baseMaps";
+import { INTEL_CATEGORIES_BY_ID } from "@/lib/intel/categories";
 
 const OperationalMap = dynamic(() => import("@/components/map/OperationalMap"), {
   ssr: false,
@@ -71,6 +72,7 @@ function HomeContent() {
   const [riskOverlayEnabled, setRiskOverlayEnabled] = useState(false);
   const [toolbarMessage, setToolbarMessage] = useState<string | null>(null);
   const [zoomToSelectedAoiToken, setZoomToSelectedAoiToken] = useState(0);
+  const [fitToSelectedAoiToken, setFitToSelectedAoiToken] = useState(0);
   const [areaSearchQueryByAoiId, setAreaSearchQueryByAoiId] = useState<Record<string, string>>({});
   const [areaSearchResultByAoiId, setAreaSearchResultByAoiId] = useState<Record<string, SearchResult>>({});
   const [areaSearchMessageByAoiId, setAreaSearchMessageByAoiId] = useState<Record<string, string | null>>({});
@@ -156,11 +158,20 @@ function HomeContent() {
       return;
     }
 
+    const enabledFilters = selectedAoi.selectedFilters.filter(
+      (filter) => INTEL_CATEGORIES_BY_ID[filter]?.available !== false,
+    );
+    if (enabledFilters.length === 0) {
+      setToolbarMessage("Select at least one enabled intelligence category before fetching.");
+      return;
+    }
+
     setSectionIntelLoading(selectedAoi.id);
 
     try {
-      const featureCollection = await fetchSectionIntel(selectedAoi);
-      setSectionIntelSuccess(selectedAoi.id, featureCollection);
+      const result = await fetchSectionIntel(selectedAoi);
+      setSectionIntelSuccess(selectedAoi.id, result.featureCollection, result.summary);
+      setZoomToSelectedAoiToken((current) => current + 1);
     } catch (fetchError) {
       setSectionIntelError(
         selectedAoi.id,
@@ -409,7 +420,10 @@ function HomeContent() {
           aois={aois}
           selectedAoiId={selectedAoiId}
           selectedAoi={selectedAoi}
-          onSelectAoi={(id) => selectAoi(id)}
+          onSelectAoi={(id) => {
+            selectAoi(id);
+            setFitToSelectedAoiToken((current) => current + 1);
+          }}
           onDeleteAoi={deleteAoi}
           onToggleFilter={toggleFilter}
           onFetchIntelligence={handleFetchSelectedData}
@@ -451,13 +465,13 @@ function HomeContent() {
           onReplaceAoiGeometry={replaceAoiGeometry}
           onSelectAoi={selectAoi}
           zoomToSelectedAoiToken={zoomToSelectedAoiToken}
+          fitToSelectedAoiToken={fitToSelectedAoiToken}
         />
       }
       rightInspector={
         <RightInspector
           selectedAoi={selectedAoi}
           onUpdateAoi={updateAoi}
-          onFetchSelectedData={handleFetchSelectedData}
         />
       }
     />

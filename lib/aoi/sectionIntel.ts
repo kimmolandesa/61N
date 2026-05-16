@@ -10,6 +10,7 @@ export interface SectionIntelSourceSummary {
 }
 
 export interface SectionIntelResponse {
+  sectionId?: string;
   aoiId: string;
   bbox: [number, number, number, number];
   requestedFilters: AoiDataFilter[];
