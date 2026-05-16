@@ -67,6 +67,20 @@ async def get_support_nodes(
     return await chokepoint_svc.get_support_nodes(_bbox(bbox), type)
 
 
+@router.get("/restrictions")
+async def get_weight_restrictions(
+    bbox: Annotated[str, Query(description="minx,miny,maxx,maxy (WGS84)")],
+):
+    """
+    Road segment weight restrictions from Väylä Digiroad.
+    Returns LineString features for segments with posted limits below Finnish standard.
+    Fields: single_vehicle_t, combination_t, axle_t, bogie_t (tonnes), passable_by.
+    Segments without restrictions meet Finnish standard (76t combination, 13t axle).
+    Cached 24 hours.
+    """
+    return await vayla_svc.get_weight_restrictions(_bbox(bbox))
+
+
 @router.get("/bridges")
 async def get_bridges(
     bbox: Annotated[str, Query(description="minx,miny,maxx,maxy (WGS84)")],
