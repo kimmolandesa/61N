@@ -1,30 +1,40 @@
 "use client";
 
-import AoiComments from "@/components/aoi/AoiComments";
-import AoiFilters from "@/components/aoi/AoiFilters";
-import type { AoiDataFilter, AoiSelection } from "@/lib/aoi/types";
+import { useMemo } from "react";
+import type { AoiSelection } from "@/lib/aoi/types";
 
 interface AoiPanelProps {
   selectedAoi: AoiSelection | null;
   onUpdateAoi: (id: string, patch: Partial<AoiSelection>) => void;
-  onAddComment: (id: string, text: string) => void;
-  onToggleFilter: (id: string, filter: AoiDataFilter) => void;
   onFetchSelectedData: () => void;
-  onDeleteAoi: (id: string) => void;
 }
 
 export default function AoiPanel({
   selectedAoi,
   onUpdateAoi,
-  onAddComment,
-  onToggleFilter,
   onFetchSelectedData,
-  onDeleteAoi,
 }: AoiPanelProps) {
+  const intelCounts = useMemo(() => {
+    if (!selectedAoi?.intel.featureCollection) {
+      return [];
+    }
+
+    const counts = new Map<string, number>();
+    for (const feature of selectedAoi.intel.featureCollection.features) {
+      const category =
+        typeof feature.properties?.category === "string"
+          ? feature.properties.category
+          : "Unknown category";
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+
+    return Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right));
+  }, [selectedAoi]);
+
   if (!selectedAoi) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 px-5 py-6 text-sm text-slate-500">
-        Select or draw an area to add notes, comments, and intelligence filters.
+        Select or draw an area to update section notes and review intelligence.
       </div>
     );
   }
@@ -51,24 +61,16 @@ export default function AoiPanel({
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
-              Notes
+              Section Notes
             </span>
             <textarea
-              rows={5}
+              rows={14}
               value={selectedAoi.notes}
               onChange={(event) => onUpdateAoi(selectedAoi.id, { notes: event.target.value })}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
             />
           </label>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <AoiComments aoi={selectedAoi} onAddComment={onAddComment} />
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <AoiFilters aoi={selectedAoi} onToggleFilter={onToggleFilter} />
       </section>
 
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -106,23 +108,14 @@ export default function AoiPanel({
       </section>
 
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onFetchSelectedData}
-            disabled={selectedAoi.intel.status === "loading"}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {selectedAoi.intel.status === "loading" ? "Fetching…" : "Fetch Intelligence"}
-          </button>
-          <button
-            type="button"
-            onClick={() => onDeleteAoi(selectedAoi.id)}
-            className="rounded-md border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
-          >
-            Delete AOI
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onFetchSelectedData}
+          disabled={selectedAoi.intel.status === "loading"}
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+        >
+          {selectedAoi.intel.status === "loading" ? "Fetching…" : "Fetch Intelligence"}
+        </button>
         {selectedAoi.intel.status === "error" && selectedAoi.intel.error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {selectedAoi.intel.error}
@@ -142,6 +135,19 @@ export default function AoiPanel({
           {selectedAoi.intel.fetchedAt ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
               Fetched {new Date(selectedAoi.intel.fetchedAt).toLocaleString()}
+            </div>
+          ) : null}
+          {intelCounts.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2">
+              {intelCounts.map(([category, count]) => (
+                <div
+                  key={category}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <span className="font-medium capitalize text-slate-700">{category}</span>
+                  <span className="text-slate-900">{count}</span>
+                </div>
+              ))}
             </div>
           ) : null}
           {!(selectedAoi.intel.featureCollection?.features.length) ? (

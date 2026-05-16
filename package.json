@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-scroll-area": "^1.2.10",
+    "@turf/turf": "^7.3.5",
     "@vercel/analytics": "^1.6.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

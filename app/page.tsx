@@ -50,7 +50,6 @@ function HomeContent() {
     selectAoi,
     clearSelection,
     clearAllAois,
-    addComment,
     toggleFilter,
     setSectionIntelLoading,
     setSectionIntelSuccess,
@@ -62,9 +61,7 @@ function HomeContent() {
 
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [currentQuery, setCurrentQuery] = useState("");
-  const [initialQuery, setInitialQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filterOperator] = useState<string | null>(null);
   const [filterType] = useState<string | null>(null);
@@ -84,7 +81,6 @@ function HomeContent() {
 
   const handleSearch = useCallback(
     async (query: string, updateUrl = true) => {
-      setLoading(true);
       setError(null);
       setSelectedId(null);
       setCurrentQuery(query);
@@ -132,8 +128,6 @@ function HomeContent() {
       } catch {
         setError("Network error. Please check your connection.");
         setSearchResult(null);
-      } finally {
-        setLoading(false);
       }
     },
     [router],
@@ -151,7 +145,6 @@ function HomeContent() {
     if (urlQuery) {
       const sanitized = sanitizeQuery(urlQuery);
       if (sanitized) {
-        setInitialQuery(sanitized);
         void handleSearch(sanitized, false);
       }
     }
@@ -408,9 +401,6 @@ function HomeContent() {
           onToggleRiskOverlays={() =>
             setRiskOverlayEnabled((current) => !current)
           }
-          onSearch={(query) => void handleSearch(query)}
-          loading={loading}
-          initialQuery={initialQuery}
         />
       }
       statusBanner={statusBanner}
@@ -420,6 +410,7 @@ function HomeContent() {
           selectedAoiId={selectedAoiId}
           selectedAoi={selectedAoi}
           onSelectAoi={(id) => selectAoi(id)}
+          onDeleteAoi={deleteAoi}
           onToggleFilter={toggleFilter}
           onFetchIntelligence={handleFetchSelectedData}
           intelState={selectedAoi?.intel ?? null}
@@ -466,10 +457,7 @@ function HomeContent() {
         <RightInspector
           selectedAoi={selectedAoi}
           onUpdateAoi={updateAoi}
-          onAddComment={addComment}
-          onToggleFilter={toggleFilter}
           onFetchSelectedData={handleFetchSelectedData}
-          onDeleteAoi={deleteAoi}
         />
       }
     />

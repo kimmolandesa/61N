@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import SearchBar from "@/components/SearchBar";
 import AoiToolbar from "@/components/aoi/AoiToolbar";
 import type { AoiDrawMode } from "@/lib/aoi/types";
 import type { BaseMapId, BaseMapConfig } from "@/lib/map/baseMaps";
@@ -27,9 +26,6 @@ interface TopToolbarProps {
   onToggleSatellite: () => void;
   onToggleTerrain: () => void;
   onToggleRiskOverlays: () => void;
-  onSearch: (query: string) => void;
-  loading: boolean;
-  initialQuery: string;
 }
 
 function ToolbarGroup({
@@ -70,21 +66,11 @@ function ToolbarButton({
 export default function TopToolbar(props: TopToolbarProps) {
   return (
     <header className="border-b border-slate-200 bg-[#f7f8fb] px-4 py-3">
-      <div className="mb-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
-            Workspace
-          </div>
-          <div className="text-2xl font-semibold text-slate-900">{props.projectName}</div>
+      <div className="mb-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+          Workspace
         </div>
-        <div className="w-full max-w-xl">
-          <SearchBar
-            onSearch={props.onSearch}
-            loading={props.loading}
-            initialQuery={props.initialQuery}
-            placeholder="Search location, coordinate, or feature..."
-          />
-        </div>
+        <div className="text-2xl font-semibold text-slate-900">{props.projectName}</div>
       </div>
       <div className="flex flex-wrap gap-3">
         <ToolbarGroup title="File">
