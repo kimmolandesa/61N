@@ -22,48 +22,6 @@ Sightline enables searching, monitoring, and analyzing real-world infrastructure
 
 And many more asset types across 30+ categories with over 200 searchable infrastructure types.
 
-## Architecture
-
-```mermaid
-flowchart TB
-    classDef frontend fill:#6366f1,stroke:#4338ca,color:#fff
-    classDef backend fill:#0ea5e9,stroke:#0284c7,color:#fff
-    classDef external fill:#f59e0b,stroke:#d97706,color:#fff
-
-    subgraph FE["Frontend"]
-        SearchBar["SearchBar"]
-        Filters["Filters"]
-        ResultList["ResultList"]
-        MapView["MapView — Leaflet.js"]
-    end
-
-    subgraph BE["Backend"]
-        route["route.ts — Request Handler"]
-        parser["parser.ts — NLP Engine"]
-        geo["geo.ts — Geocoding"]
-        overpass["overpass.ts — OSM Query Builder"]
-        cache["cache.ts — Cache Layer"]
-    end
-
-    subgraph EX["External APIs"]
-        Nominatim["Nominatim — Geocoding API"]
-        OverpassAPI["Overpass API — OSM Data"]
-    end
-
-    SearchBar & Filters & ResultList & MapView -->|"POST /api/search"| route
-
-    route -->|"parse query"| parser
-    route -->|"resolve location"| geo
-    route -->|"fetch POIs"| overpass
-    route <-->|"read / write"| cache
-
-    geo -->|"geocode"| Nominatim
-    overpass -->|"QL query"| OverpassAPI
-
-    class SearchBar,Filters,ResultList,MapView frontend
-    class route,parser,geo,overpass,cache backend
-    class Nominatim,OverpassAPI external
-```
 
 ## Data Sources
 

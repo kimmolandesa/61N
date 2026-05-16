@@ -22,17 +22,6 @@ const OperationalMap = dynamic(() => import("@/components/map/OperationalMap"), 
   ),
 });
 
-const INITIAL_QUERIES = [
-  "airports near london",
-  "hospitals in paris",
-  "power plants in texas",
-  "railway stations in delhi",
-  "towers in dubai",
-  "stadiums in berlin",
-  "museums in rome",
-  "bridges in new york",
-];
-
 function sanitizeQuery(query: string): string | null {
   const sanitized = query.trim().slice(0, 500).replace(/[\x00-\x1F\x7F]/g, "");
   return sanitized.length > 0 ? sanitized : null;
@@ -164,14 +153,8 @@ function HomeContent() {
       if (sanitized) {
         setInitialQuery(sanitized);
         void handleSearch(sanitized, false);
-        return;
       }
     }
-
-    const randomQuery =
-      INITIAL_QUERIES[Math.floor(Math.random() * INITIAL_QUERIES.length)];
-    setInitialQuery(randomQuery);
-    void handleSearch(randomQuery, true);
   }, [handleSearch, searchParams]);
 
   const handleFetchSelectedData = useCallback(async () => {
