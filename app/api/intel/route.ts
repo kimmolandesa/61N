@@ -4,11 +4,12 @@ import type { AoiDataFilter } from "@/lib/aoi/types";
 import type { SectionIntelResponse, SectionIntelSourceSummary } from "@/lib/aoi/sectionIntel";
 import { INTEL_CATEGORIES } from "@/lib/intel/categories";
 import type { IntelFeature, IntelGeometry } from "@/lib/intel/types";
+import { getIntelApiBaseUrl } from "@/lib/runtime/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const API_BASE_URL = "https://api.kebabkartta.fi";
+const API_BASE_URL = getIntelApiBaseUrl();
 
 const VALID_FILTERS: AoiDataFilter[] = INTEL_CATEGORIES.map((category) => category.id);
 

@@ -16,16 +16,6 @@ interface TopToolbarProps {
   onOpen: () => void;
   onSave: () => void;
   onExport: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  onClearSelection: () => void;
-  onFetchIntelligence: () => void;
-  onRefreshData: () => void;
-  onGenerateSummary: () => void;
-  onZoomToAoi: () => void;
-  onToggleSatellite: () => void;
-  onToggleTerrain: () => void;
-  onToggleRiskOverlays: () => void;
 }
 
 function ToolbarGroup({

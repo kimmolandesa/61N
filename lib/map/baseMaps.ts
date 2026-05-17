@@ -1,4 +1,5 @@
 import type { StyleSpecification } from "maplibre-gl";
+import { getTileApiBaseUrl } from "@/lib/runtime/config";
 
 export type BaseMapId = "terrain" | "satellite" | "mml" | "dark";
 
@@ -11,6 +12,7 @@ export interface BaseMapConfig {
 }
 
 const SHARED_GLYPHS = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
+const TILE_API_BASE_URL = getTileApiBaseUrl();
 
 function buildRasterStyle(args: {
   name: string;
@@ -93,7 +95,7 @@ export const BASE_MAPS: BaseMapConfig[] = [
       overlays: [
         {
           id: "hillshade",
-          tiles: ["https://api.kebabkartta.fi/api/terrain/dem/{z}/{x}/{y}.png"],
+          tiles: [`${TILE_API_BASE_URL}/api/terrain/dem/{z}/{x}/{y}.png`],
           attribution: "&copy; kebabkartta.fi terrain DEM hillshade",
           maxzoom: 18,
           opacity: 0.32,
@@ -120,8 +122,7 @@ export const BASE_MAPS: BaseMapConfig[] = [
     description: "National Land Survey",
     style: buildRasterStyle({
       name: "Maanmittauslaitos",
-      // If this endpoint is later replaced by a keyed upstream service, read the key from NEXT_PUBLIC_MML_API_KEY.
-      tiles: ["https://api.kebabkartta.fi/api/tiles/mml/{z}/{x}/{y}.png"],
+      tiles: [`${TILE_API_BASE_URL}/api/tiles/mml/{z}/{x}/{y}.png`],
       attribution: "&copy; Maanmittauslaitos via kebabkartta.fi",
       maxzoom: 18,
     }),

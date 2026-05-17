@@ -4,10 +4,6 @@ import type {
   SectionIntelSummary,
 } from "@/lib/aoi/types";
 import { filterFeaturesToAoi } from "@/lib/geo/filterFeaturesToAoi";
-import {
-  createIntelSummary,
-  normalizeIntelFeatureCollection,
-} from "@/lib/intel/normalizeFeatureCollection";
 import type { SectionIntelResponse } from "@/lib/aoi/sectionIntel";
 
 export interface SectionIntelFetchResult {
@@ -15,44 +11,69 @@ export interface SectionIntelFetchResult {
   summary: SectionIntelSummary;
 }
 
-function isFeatureCollection(value: unknown): value is GeoJSON.FeatureCollection<GeoJSON.Geometry, Record<string, unknown>> {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    "type" in value &&
-    value.type === "FeatureCollection" &&
-    "features" in value &&
-    Array.isArray(value.features)
-  );
+function emptyFeatureCollection(): SectionIntelFeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: [],
+  };
+}
+
+function createIntelSummary(
+  featureCollection: SectionIntelFeatureCollection,
+): SectionIntelSummary {
+  const byCategory: Record<string, number> = {};
+  const bySource: Record<string, number> = {};
+
+  for (const feature of featureCollection.features) {
+    const category =
+      typeof feature.properties?.category === "string"
+        ? feature.properties.category
+        : "unknown";
+    const source =
+      typeof feature.properties?.source === "string"
+        ? feature.properties.source
+        : "unknown";
+
+    byCategory[category] = (byCategory[category] ?? 0) + 1;
+    bySource[source] = (bySource[source] ?? 0) + 1;
+  }
+
+  return {
+    total: featureCollection.features.length,
+    byCategory,
+    bySource,
+  };
 }
 
 function normalizeSectionIntelResponse(
   response: SectionIntelResponse,
   section: AoiSelection,
 ): SectionIntelFeatureCollection {
-  return normalizeIntelFeatureCollection({
-    collection: {
-      type: "FeatureCollection",
-      features: response.overlays.map((feature, index) => ({
-        type: "Feature" as const,
-        id: feature.id ?? `${response.aoiId}-${index}`,
-        geometry: feature.geometry,
-        properties: {
-          ...feature.properties,
-          category: feature.category,
-          source: feature.source,
-          name: feature.name,
-          description:
-            typeof feature.properties?.description === "string"
-              ? feature.properties.description
-              : undefined,
-          confidence: feature.confidence,
-          timestamp: feature.timestamp,
-        },
-      })),
-    },
-    section,
-  });
+  if (!response.overlays.length) {
+    return emptyFeatureCollection();
+  }
+
+  return {
+    type: "FeatureCollection",
+    features: response.overlays.map((feature, index) => ({
+      type: "Feature",
+      id: feature.id ?? `${section.id}-${index}`,
+      geometry: feature.geometry,
+      properties: {
+        ...feature.properties,
+        category: feature.category,
+        source: feature.source,
+        name: feature.name,
+        description:
+          typeof feature.properties?.description === "string"
+            ? feature.properties.description
+            : undefined,
+        confidence: feature.confidence,
+        timestamp: feature.timestamp,
+        sectionId: section.id,
+      },
+    })),
+  };
 }
 
 export async function fetchSectionIntel(
@@ -75,42 +96,31 @@ export async function fetchSectionIntel(
     }),
   });
 
-  const data = (await res.json().catch(() => null)) as unknown;
+  const data = (await res.json().catch(() => null)) as SectionIntelResponse | { error?: string } | null;
   if (!res.ok) {
-    if (data && typeof data === "object" && "error" in data && typeof data.error === "string") {
+    if (
+      data &&
+      typeof data === "object" &&
+      "error" in data &&
+      typeof data.error === "string"
+    ) {
       throw new Error(data.error);
     }
     throw new Error("Failed to fetch intelligence");
   }
 
-  if (!data) {
-    const featureCollection = {
-      type: "FeatureCollection",
-      features: [],
-    } satisfies SectionIntelFeatureCollection;
+  if (!data || !("overlays" in data)) {
+    const featureCollection = emptyFeatureCollection();
     return {
       featureCollection,
       summary: createIntelSummary(featureCollection),
     };
   }
 
-  let featureCollection: SectionIntelFeatureCollection;
-  if (isFeatureCollection(data)) {
-    featureCollection = filterFeaturesToAoi(
-      normalizeIntelFeatureCollection({
-        collection: data,
-        section,
-      }),
-      section.geometry,
-    );
-  } else if (typeof data === "object" && data && "overlays" in data) {
-    featureCollection = filterFeaturesToAoi(normalizeSectionIntelResponse(data as SectionIntelResponse, section), section.geometry);
-  } else {
-    featureCollection = {
-      type: "FeatureCollection",
-      features: [],
-    };
-  }
+  const featureCollection = filterFeaturesToAoi(
+    normalizeSectionIntelResponse(data, section),
+    section.geometry,
+  );
 
   return {
     featureCollection,

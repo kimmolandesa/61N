@@ -3,14 +3,14 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "D-Director",
-  description: "An OSINT search engine for mapping real-world infrastructure from OpenStreetMap data.",
+  title: "Sightline Operational Workspace",
+  description: "Operational geospatial intelligence workspace for terrain, weather, infrastructure, and population analysis.",
   robots: "index, follow",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "D-Director"
-  }
+    title: "Sightline",
+  },
 };
 
 export const viewport: Viewport = {
@@ -18,7 +18,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: "cover"
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

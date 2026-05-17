@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getForecastByPlace } from "@/lib/intel/providers/fmi";
 import { resolveLocation } from "@/lib/geo";
-import { buildWeatherOverlayFeature, parseFmiForecastEntries } from "@/lib/intel/weather";
+import { buildWeatherOverlayFeature } from "@/lib/intel/weather";
 import type { GeoResult } from "@/lib/types";
 import type { IntelFeature } from "@/lib/intel/types";
 
@@ -19,6 +18,45 @@ function normalizeWeatherQuery(query: string): string {
     .replace(/^\s*weather\s+(?:in\s+)?/i, "")
     .replace(/^\s*forecast\s+(?:for\s+)?/i, "")
     .trim();
+}
+
+async function fetchForecast(lat: number, lon: number) {
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    hourly: "temperature_2m,precipitation,cloud_cover",
+    forecast_hours: "12",
+    timezone: "UTC",
+  });
+
+  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+    next: { revalidate: 0 },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Weather upstream failed with status ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    hourly?: {
+      time?: string[];
+      temperature_2m?: number[];
+      precipitation?: number[];
+      cloud_cover?: number[];
+    };
+  };
+
+  const times = data.hourly?.time ?? [];
+  const temperatures = data.hourly?.temperature_2m ?? [];
+  const precipitation = data.hourly?.precipitation ?? [];
+  const cloudCover = data.hourly?.cloud_cover ?? [];
+
+  return times.map((time, index) => ({
+    time,
+    temperatureC: typeof temperatures[index] === "number" ? temperatures[index] : null,
+    precipitationMm: typeof precipitation[index] === "number" ? precipitation[index] : null,
+    cloudCoverPct: typeof cloudCover[index] === "number" ? cloudCover[index] : null,
+  }));
 }
 
 export async function POST(
@@ -45,26 +83,11 @@ export async function POST(
       );
     }
 
-    const now = new Date();
-    const end = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-
-    const place =
-      location.addressComponents.city ??
-      location.displayName.split(",")[0]?.trim() ??
-      normalizedQuery;
-
-    const xml = await getForecastByPlace(place, {
-      starttime: now.toISOString(),
-      endtime: end.toISOString(),
-      timestep: 60,
-      parameters: "Temperature,TotalCloudCover,PrecipitationAmount",
-    });
-
-    const parsed = parseFmiForecastEntries(xml);
+    const entries = await fetchForecast(location.lat, location.lon);
     const feature = buildWeatherOverlayFeature({
       location,
-      locationName: parsed.locationName,
-      entries: parsed.entries,
+      locationName: location.addressComponents.city ?? location.displayName.split(",")[0]?.trim(),
+      entries,
     });
 
     return NextResponse.json({
@@ -73,16 +96,6 @@ export async function POST(
     });
   } catch (error) {
     console.error("Weather error:", error);
-
-    if (error instanceof Error) {
-      if (error.message.includes("aborted") || error.message.includes("timeout")) {
-        return NextResponse.json(
-          { error: "Weather request timed out.", code: "TIMEOUT" },
-          { status: 504 },
-        );
-      }
-    }
-
     return NextResponse.json(
       { error: "Failed to load weather forecast.", code: "INTERNAL_ERROR" },
       { status: 500 },

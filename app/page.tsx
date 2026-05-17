@@ -49,7 +49,6 @@ function HomeContent() {
     replaceAoiGeometry,
     deleteAoi,
     selectAoi,
-    clearSelection,
     clearAllAois,
     toggleFilter,
     setSectionIntelLoading,
@@ -69,7 +68,6 @@ function HomeContent() {
   const [weatherFeatures, setWeatherFeatures] = useState<IntelFeature[]>([]);
   const [weatherBounds, setWeatherBounds] = useState<[number, number, number, number] | null>(null);
   const [activeBasemap, setActiveBasemap] = useState<BaseMapId>("mml");
-  const [riskOverlayEnabled, setRiskOverlayEnabled] = useState(false);
   const [toolbarMessage, setToolbarMessage] = useState<string | null>(null);
   const [zoomToSelectedAoiToken, setZoomToSelectedAoiToken] = useState(0);
   const [fitToSelectedAoiToken, setFitToSelectedAoiToken] = useState(0);
@@ -296,44 +294,6 @@ function HomeContent() {
     setToolbarMessage("Exported AOIs as GeoJSON.");
   }, [aois]);
 
-  const handleUndo = useCallback(() => {
-    setToolbarMessage("Undo is not wired yet.");
-  }, []);
-
-  const handleRedo = useCallback(() => {
-    setToolbarMessage("Redo is not wired yet.");
-  }, []);
-
-  const handleRefreshData = useCallback(() => {
-    if (currentQuery) {
-      void handleSearch(currentQuery, false);
-      setToolbarMessage("Refreshing current search data.");
-    } else {
-      setToolbarMessage("Nothing to refresh yet.");
-    }
-  }, [currentQuery, handleSearch]);
-
-  const handleGenerateSummary = useCallback(() => {
-    setToolbarMessage("Summary generation will be connected to the intelligence pipeline.");
-  }, []);
-
-  const handleToggleSatellite = useCallback(() => {
-    setActiveBasemap((current) => (current === "satellite" ? "mml" : "satellite"));
-  }, []);
-
-  const handleToggleTerrain = useCallback(() => {
-    setActiveBasemap((current) => (current === "terrain" ? "mml" : "terrain"));
-  }, []);
-
-  const handleZoomToAoi = useCallback(() => {
-    if (!selectedAoi) {
-      setToolbarMessage("Select an AOI to zoom to it.");
-      return;
-    }
-
-    setZoomToSelectedAoiToken((current) => current + 1);
-  }, [selectedAoi]);
-
   const statusBanner = (
     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-600">
       <span>
@@ -367,12 +327,6 @@ function HomeContent() {
       <span>
         Basemap: <span className="font-medium text-slate-900">{BASE_MAPS_BY_ID[activeBasemap].label}</span>
       </span>
-      <span>
-        Risk overlays:{" "}
-        <span className="font-medium text-slate-900">
-          {riskOverlayEnabled ? "On" : "Off"}
-        </span>
-      </span>
       {toolbarMessage ? <span className="text-slate-500">{toolbarMessage}</span> : null}
       {error ? <span className="font-medium text-rose-700">{error}</span> : null}
     </div>
@@ -400,18 +354,6 @@ function HomeContent() {
           onOpen={handleOpenWorkspace}
           onSave={handleSaveWorkspace}
           onExport={handleExportWorkspace}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          onClearSelection={clearSelection}
-          onFetchIntelligence={handleFetchSelectedData}
-          onRefreshData={handleRefreshData}
-          onGenerateSummary={handleGenerateSummary}
-          onZoomToAoi={handleZoomToAoi}
-          onToggleSatellite={handleToggleSatellite}
-          onToggleTerrain={handleToggleTerrain}
-          onToggleRiskOverlays={() =>
-            setRiskOverlayEnabled((current) => !current)
-          }
         />
       }
       statusBanner={statusBanner}
