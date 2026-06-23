@@ -25,6 +25,7 @@ import type {
   SectionIntelFeatureProperties,
 } from "@/lib/aoi/types";
 import { BASE_MAPS_BY_ID, type BaseMapId } from "@/lib/map/baseMaps";
+import type { IntelDisplayTheme } from "@/lib/intel/categories";
 
 interface OperationalMapProps {
   results: Asset[];
@@ -41,6 +42,7 @@ interface OperationalMapProps {
   selectedAoi: AoiSelection | null;
   drawMode: AoiDrawMode;
   activeBasemap: BaseMapId;
+  activeDisplayTheme: IntelDisplayTheme;
   onAddAoiFromGeometry: (args: {
     geometry: GeoJSON.Polygon | GeoJSON.MultiPolygon;
     shapeType: AoiShapeType;
@@ -76,6 +78,7 @@ interface AoiFeatureProperties {
 interface IntelMapFeatureProperties extends SectionIntelFeatureProperties {
   id: string;
   popupHtml: string;
+  themeRelevant?: boolean;
 }
 
 const DEFAULT_CENTER: [number, number] = [0, 20];
@@ -237,6 +240,33 @@ function createIntelPopupHtml(properties: SectionIntelFeatureProperties): string
   `;
 }
 
+function isCategoryRelevantForTheme(
+  category: string | undefined,
+  theme: IntelDisplayTheme,
+): boolean {
+  if (!category || theme === "all") {
+    return true;
+  }
+
+  if (theme === "movement") {
+    return ["terrain", "topography", "elevation", "roads", "bridges", "logistics"].includes(category);
+  }
+  if (theme === "cover") {
+    return ["terrain", "landCover", "forestDensity", "topography", "water"].includes(category);
+  }
+  if (theme === "weather") {
+    return ["weather", "visibility", "satellite"].includes(category);
+  }
+  if (theme === "support") {
+    return ["logistics", "telecom", "healthcare", "power", "infrastructure", "bridges", "roads"].includes(category);
+  }
+  if (theme === "civilian") {
+    return ["population", "infrastructure", "healthcare", "water"].includes(category);
+  }
+
+  return true;
+}
+
 function asAoiGeometry(
   geometry: GeoJSONStoreFeatures["geometry"],
 ): GeoJSON.Polygon | GeoJSON.MultiPolygon | null {
@@ -344,11 +374,16 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
         ],
         "fill-opacity": [
           "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          [
+            "case",
           // Fallback radius = estimated coverage → lighter fill.
           ["all", ["==", ["get", "category"], "telecom"], ["==", ["get", "range_source"], "fallback"]], 0.15,
           // API-provided radius = operator-verified → solid fill.
           ["==", ["get", "category"], "telecom"], 0.4,
           0.18,
+          ],
+          0.04,
         ],
       },
     });
@@ -364,7 +399,12 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       paint: {
         "line-color": "#334155",
         "line-width": 2,
-        "line-opacity": 0.85,
+        "line-opacity": [
+          "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          0.85,
+          0.08,
+        ],
       },
     });
   }
@@ -388,7 +428,12 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
           "#f59e0b",
         ],
         "line-width": 3,
-        "line-opacity": 0.9,
+        "line-opacity": [
+          "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          0.9,
+          0.1,
+        ],
       },
     });
   }
@@ -401,11 +446,16 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
       filter: ["==", ["geometry-type"], "Point"],
       paint: {
         "circle-radius": [
-          "match",
-          ["get", "category"],
-          "telecom",
-          8,
-          6,
+          "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          [
+            "match",
+            ["get", "category"],
+            "telecom",
+            8,
+            6,
+          ],
+          4,
         ],
         "circle-color": [
           "case",
@@ -436,6 +486,18 @@ function ensureSourcesAndLayers(map: maplibregl.Map): void {
           ["get", "category"],
           "telecom", 2,
           1.5,
+        ],
+        "circle-opacity": [
+          "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          0.95,
+          0.18,
+        ],
+        "circle-stroke-opacity": [
+          "case",
+          ["boolean", ["get", "themeRelevant"], false],
+          1,
+          0.2,
         ],
       },
     });
@@ -571,6 +633,7 @@ export default function OperationalMap({
   selectedAoi,
   drawMode,
   activeBasemap,
+  activeDisplayTheme,
   onAddAoiFromGeometry,
   onReplaceAoiGeometry,
   onSelectAoi,
@@ -774,12 +837,16 @@ export default function OperationalMap({
             properties: {
               id: String(feature.id ?? `intel-${index}`),
               ...properties,
+              themeRelevant: isCategoryRelevantForTheme(
+                typeof properties.category === "string" ? properties.category : undefined,
+                activeDisplayTheme,
+              ),
               popupHtml: createIntelPopupHtml(properties),
             },
           };
         }),
     };
-  }, [selectedSectionIntel]);
+  }, [activeDisplayTheme, selectedSectionIntel]);
 
   const aoiGeoJson = useMemo<
     GeoJSON.FeatureCollection<GeoJSON.Polygon | GeoJSON.MultiPolygon, AoiFeatureProperties>

@@ -28,6 +28,14 @@ export interface SectionIntelFeatureProperties {
   [key: string]: unknown;
 }
 
+export interface SectionIntelSourceSummary {
+  sourceId: AoiDataFilter;
+  label: string;
+  status: "success" | "error";
+  featureCount: number;
+  message?: string;
+}
+
 export type SectionIntelFeatureCollection =
   GeoJSON.FeatureCollection<GeoJSON.Geometry, SectionIntelFeatureProperties>;
 
@@ -35,6 +43,14 @@ export interface SectionIntelSummary {
   total: number;
   byCategory: Record<string, number>;
   bySource: Record<string, number>;
+  message?: string;
+  notes?: string[];
+  sourceSummaries?: SectionIntelSourceSummary[];
+  totals?: {
+    features: number;
+    sourcesSuccessful: number;
+    sourcesFailed: number;
+  };
 }
 
 export interface AoiIntelState {

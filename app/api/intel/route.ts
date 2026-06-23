@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { circle as turfCircle } from "@turf/turf";
-import type { AoiDataFilter } from "@/lib/aoi/types";
-import type { SectionIntelResponse, SectionIntelSourceSummary } from "@/lib/aoi/sectionIntel";
+import type { AoiDataFilter, SectionIntelSourceSummary } from "@/lib/aoi/types";
+import type { SectionIntelResponse } from "@/lib/aoi/sectionIntel";
 import { INTEL_CATEGORIES } from "@/lib/intel/categories";
 import type { IntelFeature, IntelGeometry } from "@/lib/intel/types";
 import { getIntelApiBaseUrl } from "@/lib/runtime/config";
@@ -10,6 +10,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const API_BASE_URL = getIntelApiBaseUrl();
+const FEATURE_LAYER_LIMIT = 5000;
+const FEATURE_LAYER_MAX_CHUNK_SPAN_DEG = 0.08;
 
 const VALID_FILTERS: AoiDataFilter[] = INTEL_CATEGORIES.map((category) => category.id);
 
@@ -47,6 +49,14 @@ function bboxToQuery(bbox: [number, number, number, number]): string {
 
 function bboxCenter(bbox: [number, number, number, number]): [number, number] {
   return [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
+}
+
+function bboxWidth(bbox: [number, number, number, number]): number {
+  return Math.max(0, bbox[2] - bbox[0]);
+}
+
+function bboxHeight(bbox: [number, number, number, number]): number {
+  return Math.max(0, bbox[3] - bbox[1]);
 }
 
 function isIntelGeometry(geometry: GeoJSON.Geometry): geometry is IntelGeometry {
@@ -143,6 +153,93 @@ function hasTextMatch(properties: Record<string, unknown>, terms: string[]): boo
     .toLowerCase();
 
   return terms.some((term) => haystack.includes(term));
+}
+
+function splitBboxIntoChunks(
+  bbox: [number, number, number, number],
+  maxSpanDeg = FEATURE_LAYER_MAX_CHUNK_SPAN_DEG,
+): Array<[number, number, number, number]> {
+  const width = bboxWidth(bbox);
+  const height = bboxHeight(bbox);
+  const columns = Math.max(1, Math.ceil(width / maxSpanDeg));
+  const rows = Math.max(1, Math.ceil(height / maxSpanDeg));
+  const chunkWidth = width / columns;
+  const chunkHeight = height / rows;
+  const chunks: Array<[number, number, number, number]> = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const minx = bbox[0] + column * chunkWidth;
+      const maxx = column === columns - 1 ? bbox[2] : minx + chunkWidth;
+      const miny = bbox[1] + row * chunkHeight;
+      const maxy = row === rows - 1 ? bbox[3] : miny + chunkHeight;
+      chunks.push([minx, miny, maxx, maxy]);
+    }
+  }
+
+  return chunks;
+}
+
+function featureDedupKey(
+  feature: GeoJSON.Feature<GeoJSON.Geometry, Record<string, unknown>>,
+  fallbackIndex: number,
+): string {
+  const osmId = feature.properties?.osm_id;
+  if (feature.id != null) {
+    return String(feature.id);
+  }
+  if (typeof osmId === "number" || typeof osmId === "string") {
+    return String(osmId);
+  }
+
+  return JSON.stringify(feature.geometry) + `:${fallbackIndex}`;
+}
+
+function mergeFeatureCollections(
+  collections: GeoJsonFeatureCollection[],
+): GeoJsonFeatureCollection {
+  const seen = new Set<string>();
+  const features: GeoJsonFeatureCollection["features"] = [];
+
+  for (const collection of collections) {
+    for (const feature of collection.features) {
+      if (!feature.geometry) {
+        continue;
+      }
+
+      const key = featureDedupKey(feature, features.length);
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      features.push(feature);
+    }
+  }
+
+  return {
+    type: "FeatureCollection",
+    features,
+  };
+}
+
+async function fetchFeatureLayerCollection(args: {
+  bbox: [number, number, number, number];
+  layer: "all" | "military" | "roads" | "water" | "buildings" | "infrastructure";
+}): Promise<{ collection: GeoJsonFeatureCollection; chunkCount: number }> {
+  const chunks = splitBboxIntoChunks(args.bbox);
+  const collections = await Promise.all(
+    chunks.map((chunk) =>
+      fetchJson<GeoJsonFeatureCollection>(
+        `/api/features/bbox?minx=${chunk[0]}&miny=${chunk[1]}&maxx=${chunk[2]}&maxy=${chunk[3]}&layer=${args.layer}&limit=${FEATURE_LAYER_LIMIT}`,
+      ),
+    ),
+  );
+
+  return {
+    collection: mergeFeatureCollections(collections),
+    chunkCount: chunks.length,
+  };
 }
 
 async function fetchWeather(
@@ -374,9 +471,10 @@ async function fetchFeatureLayer(args: {
   category?: IntelFeature["category"];
   propertyFilter?: (properties: Record<string, unknown>) => boolean;
 }): Promise<{ features: IntelFeature[]; summary: SectionIntelSourceSummary }> {
-  const collection = await fetchJson<GeoJsonFeatureCollection>(
-    `/api/features/bbox?minx=${args.bbox[0]}&miny=${args.bbox[1]}&maxx=${args.bbox[2]}&maxy=${args.bbox[3]}&layer=${args.layer}&limit=1000`,
-  );
+  const { collection, chunkCount } = await fetchFeatureLayerCollection({
+    bbox: args.bbox,
+    layer: args.layer,
+  });
 
   const filteredCollection: GeoJsonFeatureCollection = {
     ...collection,
@@ -404,6 +502,7 @@ async function fetchFeatureLayer(args: {
       label: args.defaultName,
       status: "success",
       featureCount: features.length,
+      message: `${features.length} ${args.defaultName.toLowerCase()} feature${features.length === 1 ? "" : "s"} returned${chunkCount > 1 ? ` across ${chunkCount} AOI chunks` : ""}.`,
     }),
   };
 }
@@ -844,7 +943,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<SectionIn
 
     const overlays = jobs.flatMap((job) => job.features);
     const sourceSummaries = jobs.map((job) => job.summary);
-    const notes = jobs.flatMap((job) => job.notes ?? []);
+    const notes = Array.from(
+      new Set(
+        [
+          ...jobs.flatMap((job) => job.notes ?? []),
+          ...sourceSummaries
+            .map((item) => item.message)
+            .filter((message): message is string => typeof message === "string" && message.trim().length > 0),
+        ],
+      ),
+    );
+    const sourcesSuccessful = sourceSummaries.filter((item) => item.status === "success").length;
+    const sourcesFailed = sourceSummaries.filter((item) => item.status === "error").length;
 
     return NextResponse.json({
       sectionId: typeof body.sectionId === "string" ? body.sectionId : undefined,
@@ -854,13 +964,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<SectionIn
       generatedAt: new Date().toISOString(),
       message:
         overlays.length > 0
-          ? "Area intelligence fetched successfully."
+          ? `${sourcesSuccessful} source${sourcesSuccessful === 1 ? "" : "s"} loaded${sourcesFailed > 0 ? `, ${sourcesFailed} failed` : ""}.`
           : "No overlay features were returned from the selected sources.",
       notes,
       totals: {
         features: overlays.length,
-        sourcesSuccessful: sourceSummaries.filter((item) => item.status === "success").length,
-        sourcesFailed: sourceSummaries.filter((item) => item.status === "error").length,
+        sourcesSuccessful,
+        sourcesFailed,
       },
       sourceSummaries,
       overlays,

@@ -3,13 +3,13 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sightline Operational Workspace",
+  title: " 61N Operational Workspace",
   description: "Operational geospatial intelligence workspace for terrain, weather, infrastructure, and population analysis.",
   robots: "index, follow",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Sightline",
+    title: " 61N Operational Workspace",
   },
 };
 

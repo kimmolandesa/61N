@@ -126,14 +126,7 @@ export const BASE_MAPS: BaseMapConfig[] = [
       attribution: "&copy; Maanmittauslaitos via kebabkartta.fi",
       maxzoom: 18,
     }),
-  },
-  {
-    id: "dark",
-    label: "Dark / Tactical",
-    description: "Placeholder until tactical style is connected",
-    style: "https://demotiles.maplibre.org/style.json",
-    available: false,
-  },
+  }
 ];
 
 export const BASE_MAPS_BY_ID: Record<BaseMapId, BaseMapConfig> = Object.fromEntries(

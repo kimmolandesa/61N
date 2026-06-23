@@ -1,13 +1,5 @@
-import type { AoiDataFilter } from "@/lib/aoi/types";
+import type { AoiDataFilter, SectionIntelSourceSummary } from "@/lib/aoi/types";
 import type { IntelFeature } from "@/lib/intel/types";
-
-export interface SectionIntelSourceSummary {
-  sourceId: AoiDataFilter;
-  label: string;
-  status: "success" | "error";
-  featureCount: number;
-  message?: string;
-}
 
 export interface SectionIntelResponse {
   sectionId?: string;

@@ -12,7 +12,7 @@ import { fetchSectionIntel } from "@/lib/intel/client";
 import type { GeoResult, SearchError, SearchResult } from "@/lib/types";
 import type { IntelFeature } from "@/lib/intel/types";
 import { BASE_MAPS, BASE_MAPS_BY_ID, type BaseMapId } from "@/lib/map/baseMaps";
-import { INTEL_CATEGORIES_BY_ID } from "@/lib/intel/categories";
+import { INTEL_CATEGORIES_BY_ID, type IntelDisplayTheme } from "@/lib/intel/categories";
 
 const OperationalMap = dynamic(() => import("@/components/map/OperationalMap"), {
   ssr: false,
@@ -68,6 +68,7 @@ function HomeContent() {
   const [weatherFeatures, setWeatherFeatures] = useState<IntelFeature[]>([]);
   const [weatherBounds, setWeatherBounds] = useState<[number, number, number, number] | null>(null);
   const [activeBasemap, setActiveBasemap] = useState<BaseMapId>("mml");
+  const [activeDisplayTheme, setActiveDisplayTheme] = useState<IntelDisplayTheme>("all");
   const [toolbarMessage, setToolbarMessage] = useState<string | null>(null);
   const [zoomToSelectedAoiToken, setZoomToSelectedAoiToken] = useState(0);
   const [fitToSelectedAoiToken, setFitToSelectedAoiToken] = useState(0);
@@ -336,9 +337,10 @@ function HomeContent() {
     <AppShell
       topBar={
         <TopToolbar
-          projectName="Sightline Operational Workspace"
+          projectName="61N Operational Workspace"
           activeDrawMode={activeDrawMode}
           activeBaseMap={activeBasemap}
+          activeDisplayTheme={activeDisplayTheme}
           baseMaps={BASE_MAPS}
           onSetDrawMode={(mode) =>
             setActiveDrawMode(mode === "measure" ? "measure" : mode)
@@ -350,6 +352,7 @@ function HomeContent() {
             }
             setActiveBasemap(id);
           }}
+          onSetDisplayTheme={setActiveDisplayTheme}
           onNew={handleNewWorkspace}
           onOpen={handleOpenWorkspace}
           onSave={handleSaveWorkspace}
@@ -403,6 +406,7 @@ function HomeContent() {
           selectedAoi={selectedAoi}
           drawMode={activeDrawMode}
           activeBasemap={activeBasemap}
+          activeDisplayTheme={activeDisplayTheme}
           onAddAoiFromGeometry={addAoiFromGeometry}
           onReplaceAoiGeometry={replaceAoiGeometry}
           onSelectAoi={selectAoi}

@@ -20,6 +20,7 @@ function emptyFeatureCollection(): SectionIntelFeatureCollection {
 
 function createIntelSummary(
   featureCollection: SectionIntelFeatureCollection,
+  response?: SectionIntelResponse,
 ): SectionIntelSummary {
   const byCategory: Record<string, number> = {};
   const bySource: Record<string, number> = {};
@@ -42,6 +43,10 @@ function createIntelSummary(
     total: featureCollection.features.length,
     byCategory,
     bySource,
+    message: response?.message,
+    notes: response?.notes,
+    sourceSummaries: response?.sourceSummaries,
+    totals: response?.totals,
   };
 }
 
@@ -124,6 +129,6 @@ export async function fetchSectionIntel(
 
   return {
     featureCollection,
-    summary: createIntelSummary(featureCollection),
+    summary: createIntelSummary(featureCollection, data),
   };
 }

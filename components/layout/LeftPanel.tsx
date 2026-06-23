@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { AoiDataFilter, AoiIntelState, AoiSelection } from "@/lib/aoi/types";
+import { INTEL_CATEGORIES_BY_ID } from "@/lib/intel/categories";
 
 const SHAPE_LABELS = {
   polygon: "Polygon",
@@ -10,19 +11,30 @@ const SHAPE_LABELS = {
   freehand: "Freehand",
 } as const;
 
-const FILTER_OPTIONS: Array<{ value: AoiDataFilter; label: string }> = [
-  { value: "weather", label: "Weather" },
-  { value: "terrain", label: "Terrain" },
-  { value: "infrastructure", label: "Infrastructure" },
-  { value: "roads", label: "Roads" },
-  { value: "bridges", label: "Bridges" },
-  { value: "population", label: "Population" },
-  { value: "telecom", label: "Telecom" },
-  { value: "satellite", label: "Satellite" },
-  { value: "healthcare", label: "Healthcare" },
-  { value: "power", label: "Power Grid" },
-  { value: "water", label: "Water Sources" },
-  { value: "logistics", label: "Logistics" },
+const FILTER_GROUPS: Array<{
+  label: string;
+  filters: AoiDataFilter[];
+}> = [
+  {
+    label: "Can forces move here?",
+    filters: ["terrain", "topography", "elevation", "roads", "bridges", "logistics"],
+  },
+  {
+    label: "What gives cover or concealment?",
+    filters: ["landCover", "forestDensity", "water"],
+  },
+  {
+    label: "How does weather change the picture?",
+    filters: ["weather", "visibility", "satellite"],
+  },
+  {
+    label: "How can forces be supported?",
+    filters: ["infrastructure", "telecom", "healthcare", "power"],
+  },
+  {
+    label: "Who else is in the area?",
+    filters: ["population", "demographics"],
+  },
 ];
 
 interface LeftPanelProps {
@@ -74,6 +86,16 @@ export default function LeftPanel({
 
     return Array.from(counts.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [intelState]);
+  const groupedFilters = useMemo(
+    () =>
+      FILTER_GROUPS.map((group) => ({
+        ...group,
+        filters: group.filters
+          .map((filterId) => INTEL_CATEGORIES_BY_ID[filterId])
+          .filter((filter) => !!filter),
+      })),
+    [],
+  );
 
   return (
     <aside className="flex min-h-0 flex-col border-b border-slate-200 bg-[#f8fafc] xl:h-full xl:border-b-0 xl:border-r">
@@ -109,7 +131,7 @@ export default function LeftPanel({
                   >
                     <div className="font-medium">{aoi.name}</div>
                     <div className={`mt-1 text-xs ${aoi.id === selectedAoiId ? "text-slate-300" : "text-slate-500"}`}>
-                      {SHAPE_LABELS[aoi.shapeType]} · {aoi.areaSqKm ? `${aoi.areaSqKm.toFixed(1)} km²` : "Area n/a"} · {aoi.selectedFilters.length} sources
+                      {SHAPE_LABELS[aoi.shapeType]} · {aoi.areaSqKm ? `${aoi.areaSqKm.toFixed(1)} km²` : "Area n/a"} · {aoi.selectedFilters.length} active layers
                     </div>
                   </button>
                   <div className="flex items-start gap-3">
@@ -140,28 +162,44 @@ export default function LeftPanel({
 
         <div className="mt-6">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Data Sources
+            Intelligence Questions
           </div>
           <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             {!selectedAoi ? (
               <div className="text-sm text-slate-500">
-                Select a section to configure data sources.
+                Select a section to choose what questions this briefing should answer.
               </div>
             ) : (
-              <div className="space-y-3">
-                {FILTER_OPTIONS.map((filter) => (
-                  <label
-                    key={filter.value}
-                    className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAoi.selectedFilters.includes(filter.value)}
-                      onChange={() => onToggleFilter(selectedAoi.id, filter.value)}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-                    />
-                    <span>{filter.label}</span>
-                  </label>
+              <div className="space-y-4">
+                {groupedFilters.map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {group.label}
+                    </div>
+                    {group.filters.map((filter) => (
+                      <label
+                        key={filter.id}
+                        className={`flex items-start gap-3 rounded-lg border px-3 py-2 text-sm ${
+                          filter.available === false
+                            ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                            : "border-slate-200 text-slate-700"
+                        }`}
+                        title={filter.description}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedAoi.selectedFilters.includes(filter.id)}
+                          onChange={() => onToggleFilter(selectedAoi.id, filter.id)}
+                          disabled={filter.available === false}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                        />
+                        <div>
+                          <div>{filter.label}</div>
+                          <div className="mt-0.5 text-xs text-slate-500">{filter.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
                 ))}
                 <button
                   type="button"
@@ -183,9 +221,22 @@ export default function LeftPanel({
                         ? `${intelState.featureCollection.features.length} feature${intelState.featureCollection.features.length === 1 ? "" : "s"} loaded.`
                         : "No data returned for selected sources"}
                     </div>
+                    {intelState.summary?.message ? (
+                      <div className="mt-1 text-xs text-slate-600">{intelState.summary.message}</div>
+                    ) : null}
                     {intelState.fetchedAt ? (
                       <div className="mt-1 text-xs text-slate-500">
                         Fetched {new Date(intelState.fetchedAt).toLocaleString()}
+                      </div>
+                    ) : null}
+                    {intelState.summary?.sourceSummaries?.length ? (
+                      <div className="mt-3 space-y-2">
+                        {intelState.summary.sourceSummaries.slice(0, 3).map((source) => (
+                          <div key={source.sourceId} className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs text-slate-700">
+                            <span className="font-semibold">{source.label}:</span>{" "}
+                            {source.message ?? `${source.featureCount} feature${source.featureCount === 1 ? "" : "s"} returned.`}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                     {intelCounts.length > 0 ? (

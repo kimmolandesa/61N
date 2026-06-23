@@ -4,14 +4,18 @@ import type { ReactNode } from "react";
 import AoiToolbar from "@/components/aoi/AoiToolbar";
 import type { AoiDrawMode } from "@/lib/aoi/types";
 import type { BaseMapId, BaseMapConfig } from "@/lib/map/baseMaps";
+import type { IntelDisplayTheme } from "@/lib/intel/categories";
+import { INTEL_DISPLAY_THEMES } from "@/lib/intel/categories";
 
 interface TopToolbarProps {
   projectName: string;
   activeDrawMode: AoiDrawMode;
   activeBaseMap: BaseMapId;
+  activeDisplayTheme: IntelDisplayTheme;
   baseMaps: BaseMapConfig[];
   onSetDrawMode: (mode: AoiDrawMode) => void;
   onSetBaseMap: (id: BaseMapId) => void;
+  onSetDisplayTheme: (theme: IntelDisplayTheme) => void;
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
@@ -93,6 +97,7 @@ export default function TopToolbar(props: TopToolbarProps) {
             ))}
           </div>
         </ToolbarGroup>
+       
       </div>
     </header>
   );

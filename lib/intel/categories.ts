@@ -28,6 +28,51 @@ export interface IntelCategoryConfig {
   available?: boolean;
 }
 
+export type IntelDisplayTheme =
+  | "all"
+  | "movement"
+  | "cover"
+  | "weather"
+  | "support"
+  | "civilian";
+
+export const INTEL_DISPLAY_THEMES: Array<{
+  id: IntelDisplayTheme;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "all",
+    label: "Full picture",
+    description: "Show the complete operational picture.",
+  },
+  {
+    id: "movement",
+    label: "Movement",
+    description: "Emphasize roads, bridges, chokepoints, and terrain friction.",
+  },
+  {
+    id: "cover",
+    label: "Cover",
+    description: "Emphasize concealment, land cover, forest density, and water obstacles.",
+  },
+  {
+    id: "weather",
+    label: "Weather",
+    description: "Emphasize weather, visibility, and satellite observation context.",
+  },
+  {
+    id: "support",
+    label: "Support",
+    description: "Emphasize logistics, telecom, healthcare, and infrastructure support.",
+  },
+  {
+    id: "civilian",
+    label: "Civilian",
+    description: "Emphasize population and built-up civilian context.",
+  },
+];
+
 export const INTEL_CATEGORIES: IntelCategoryConfig[] = [
   {
     id: "terrain",
