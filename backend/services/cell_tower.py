@@ -69,7 +69,8 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
     limit = 1000
     params = {
         'key':    settings.OPENCELLID_API_KEY,
-        'BBOX':   f"{west},{south},{east},{north}",
+        # OpenCellID expects: minLat,minLng,maxLat,maxLng (south,west,north,east)
+        'BBOX':   f"{south},{west},{north},{east}",
         'format': 'json',
         'limit':  limit,
     }
@@ -78,6 +79,18 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
         r = await client.get(OPENCELLID_BASE, params=params)
         r.raise_for_status()
         raw = r.json()
+
+    # Handle internal API errors returned with HTTP 200 (e.g. BBOX too big)
+    if "error" in raw:
+        return {
+            'error': raw['error'],
+            'towers': {
+                'type': 'FeatureCollection',
+                'features': [],
+                'metadata': {'tower_count': 0, 'truncated': False, 'source': 'OpenCellID'},
+            },
+            'summary': f"api error: {raw['error']}",
+        }
 
     tower_features: list[dict] = []
 
