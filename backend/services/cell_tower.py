@@ -2,6 +2,7 @@ import httpx
 
 from core.cache import TTLCache
 from core.config import settings
+from mock import get_fixture
 
 OPENCELLID_BASE = "https://opencellid.org/cell/getInArea"
 TIMEOUT_S = 20.0
@@ -49,6 +50,9 @@ async def get_cell_coverage(bbox: tuple[float, float, float, float]) -> dict:
     Returns a GeoJSON FeatureCollection of Point features (one per tower).
     Coverage circles are drawn client-side from coverage_radius_m + radio type.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("comms")
+
     if not settings.OPENCELLID_API_KEY:
         return {
             'error': 'OPENCELLID_API_KEY not configured',

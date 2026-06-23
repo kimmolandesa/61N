@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9150, 60.1620]}, "properties": {"osm_id": 287441, "name": "Meilahti substation", "natural": null, "landuse": null, "highway": null, "waterway": null, "military": null, "amenity": null, "building": null, "man_made": "power_substation", "power": "substation", "historic": null, "ele": null}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9620, 60.1740]}, "properties": {"osm_id": 295882, "name": "Kallio water tower", "natural": null, "landuse": null, "highway": null, "waterway": null, "military": null, "amenity": null, "building": null, "man_made": "water_tower", "power": null, "historic": null, "ele": null}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9360, 60.1680]}, "properties": {"osm_id": 312040, "name": "Helsinki University Hospital", "natural": null, "landuse": null, "highway": null, "waterway": null, "military": null, "amenity": "hospital", "building": "hospital", "man_made": null, "power": null, "historic": null, "ele": null}},
+    {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24.9200,60.1480],[24.9350,60.1480],[24.9350,60.1560],[24.9200,60.1560],[24.9200,60.1480]]]}, "properties": {"osm_id": 328801, "name": "Eteläsatama port", "natural": null, "landuse": "port", "highway": null, "waterway": null, "military": null, "amenity": null, "building": null, "man_made": null, "power": null, "historic": null, "ele": null}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [25.0120, 60.2240]}, "properties": {"osm_id": 341120, "name": "Pasila railway yard", "natural": null, "landuse": "railway", "highway": null, "waterway": null, "military": null, "amenity": null, "building": null, "man_made": null, "power": null, "historic": null, "ele": null}}
+  ]
+}

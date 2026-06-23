@@ -1,0 +1,47 @@
+{
+  "type": "FeatureCollection",
+  "source": "GTK Maapera 1:200000 (PostGIS)",
+  "bbox": [24.80, 60.10, 25.10, 60.35],
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.90,60.14],[24.93,60.14],[24.93,60.17],[24.90,60.17],[24.90,60.14]]]},
+      "properties": {
+        "deposit_type": "till", "peat_depth": null,
+        "digging_suitability": "moderate", "trafficability_dry": "good", "trafficability_wet": "moderate",
+        "concealment_potential": "low", "groundwater_risk": "low",
+        "_raw": {"OBJECTID": 11204, "PINTAMAALAJI_KOODI": "Mr", "PINTAMAALAJI": "Moreeni (Mr)", "POHJAMAALAJI_KOODI": "Mr", "POHJAMAALAJI": "Moreeni (Mr)", "SHAPE_AREA": 3240000.0, "SHAPE_LEN": 7200.0}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.93,60.14],[24.97,60.14],[24.97,60.17],[24.93,60.17],[24.93,60.14]]]},
+      "properties": {
+        "deposit_type": "clay", "peat_depth": null,
+        "digging_suitability": "easy", "trafficability_dry": "moderate", "trafficability_wet": "poor",
+        "concealment_potential": "low", "groundwater_risk": "high",
+        "_raw": {"OBJECTID": 11205, "PINTAMAALAJI_KOODI": "Sa", "PINTAMAALAJI": "Savi (Sa)", "POHJAMAALAJI_KOODI": "Sa", "POHJAMAALAJI": "Savi (Sa)", "SHAPE_AREA": 4320000.0, "SHAPE_LEN": 8400.0}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.90,60.17],[24.93,60.17],[24.93,60.20],[24.90,60.20],[24.90,60.17]]]},
+      "properties": {
+        "deposit_type": "peat_thin", "peat_depth": 0.8,
+        "digging_suitability": "easy", "trafficability_dry": "poor", "trafficability_wet": "impassable",
+        "concealment_potential": "low", "groundwater_risk": "high",
+        "_raw": {"OBJECTID": 11206, "PINTAMAALAJI_KOODI": "Ct", "PINTAMAALAJI": "Turve, ohut (Ct)", "POHJAMAALAJI_KOODI": "Mr", "POHJAMAALAJI": "Moreeni (Mr)", "SHAPE_AREA": 2700000.0, "SHAPE_LEN": 6600.0}
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.93,60.17],[24.97,60.17],[24.97,60.20],[24.93,60.20],[24.93,60.17]]]},
+      "properties": {
+        "deposit_type": "glaciofluvial_gravel", "peat_depth": null,
+        "digging_suitability": "moderate", "trafficability_dry": "excellent", "trafficability_wet": "good",
+        "concealment_potential": "low", "groundwater_risk": "medium",
+        "_raw": {"OBJECTID": 11207, "PINTAMAALAJI_KOODI": "GrM", "PINTAMAALAJI": "Glasifluviaalinen moreeni (GrM)", "POHJAMAALAJI_KOODI": "GrM", "POHJAMAALAJI": "Glasifluviaalinen moreeni (GrM)", "SHAPE_AREA": 3600000.0, "SHAPE_LEN": 7600.0}
+      }
+    }
+  ]
+}

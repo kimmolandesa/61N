@@ -4,7 +4,9 @@ import math
 
 import networkx as nx
 
+from core.config import settings
 from core.db import get_pool
+from mock import get_fixture
 from services.vayla import get_bridges, match_bridges_to_osm
 
 
@@ -143,6 +145,9 @@ async def get_chokepoints(bbox: tuple) -> dict:
     Bridge segments are enriched with Väylä load capacity data.
     Returns top-30 segments as GeoJSON FeatureCollection.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("chokepoints")
+
     rows = await _fetch_roads(bbox)
     if not rows:
         return {'type': 'FeatureCollection', 'features': []}
@@ -311,6 +316,9 @@ async def get_support_nodes(bbox: tuple, node_type: str = 'all') -> dict:
     Logistics and medical support nodes within the bbox from OSM.
     Queries both point and polygon tables (polygon centroids).
     """
+    if settings.MOCK_MODE:
+        return get_fixture("support_nodes")
+
     west, south, east, north = bbox
 
     _FILTERS = {

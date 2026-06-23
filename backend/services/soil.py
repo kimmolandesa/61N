@@ -7,7 +7,9 @@ import json
 import xml.etree.ElementTree as ET
 
 from core.cache import TTLCache
+from core.config import settings
 from core.db import get_pool
+from mock import get_fixture
 
 GTK_WFS = (
     "https://gtkdata.gtk.fi/arcgis/services/Rajapinnat/"
@@ -166,6 +168,9 @@ async def get_soil(bbox: tuple[float, float, float, float]) -> dict:
     Returns GeoJSON FeatureCollection with tactical attributes.
     Cached 1 hour in memory. Run scripts/ingest_soil.py first.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("soil")
+
     west, south, east, north = bbox
     key = f"soil:{west:.3f}:{south:.3f}:{east:.3f}:{north:.3f}"
     cached = _cache.get(key)

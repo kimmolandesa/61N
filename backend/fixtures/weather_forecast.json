@@ -1,0 +1,20 @@
+{
+  "bbox": [24.80, 60.10, 25.10, 60.35],
+  "center": {"lat": 60.17, "lon": 24.94},
+  "hours": 72,
+  "count": 12,
+  "forecast": [
+    {"lat": 60.17, "lon": 24.94, "time": 1750723200.0, "Temperature": 14.2, "WindSpeedMS": 3.1, "WindGust": 5.2, "WindDirection": 220.0, "Humidity": 72.0, "Visibility": 18000.0, "TotalCloudCover": 4.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750726800.0, "Temperature": 13.8, "WindSpeedMS": 2.9, "WindGust": 4.8, "WindDirection": 215.0, "Humidity": 74.0, "Visibility": 20000.0, "TotalCloudCover": 5.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750730400.0, "Temperature": 12.4, "WindSpeedMS": 2.5, "WindGust": 4.0, "WindDirection": 200.0, "Humidity": 78.0, "Visibility": 20000.0, "TotalCloudCover": 6.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750734000.0, "Temperature": 11.6, "WindSpeedMS": 2.2, "WindGust": 3.5, "WindDirection": 188.0, "Humidity": 81.0, "Visibility": 22000.0, "TotalCloudCover": 4.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750737600.0, "Temperature": 11.1, "WindSpeedMS": 2.0, "WindGust": 3.2, "WindDirection": 175.0, "Humidity": 83.0, "Visibility": 25000.0, "TotalCloudCover": 2.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750741200.0, "Temperature": 12.3, "WindSpeedMS": 2.4, "WindGust": 3.8, "WindDirection": 160.0, "Humidity": 79.0, "Visibility": 28000.0, "TotalCloudCover": 1.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750744800.0, "Temperature": 14.8, "WindSpeedMS": 3.0, "WindGust": 4.5, "WindDirection": 155.0, "Humidity": 71.0, "Visibility": 30000.0, "TotalCloudCover": 1.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750748400.0, "Temperature": 16.9, "WindSpeedMS": 3.4, "WindGust": 5.1, "WindDirection": 148.0, "Humidity": 64.0, "Visibility": 30000.0, "TotalCloudCover": 2.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750752000.0, "Temperature": 18.2, "WindSpeedMS": 3.8, "WindGust": 5.8, "WindDirection": 140.0, "Humidity": 60.0, "Visibility": 30000.0, "TotalCloudCover": 3.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750755600.0, "Temperature": 18.8, "WindSpeedMS": 4.1, "WindGust": 6.2, "WindDirection": 135.0, "Humidity": 58.0, "Visibility": 30000.0, "TotalCloudCover": 4.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750759200.0, "Temperature": 17.5, "WindSpeedMS": 3.6, "WindGust": 5.5, "WindDirection": 130.0, "Humidity": 62.0, "Visibility": 28000.0, "TotalCloudCover": 5.0, "Precipitation1h": 0.0, "SnowDepth": 0.0},
+    {"lat": 60.17, "lon": 24.94, "time": 1750762800.0, "Temperature": 15.9, "WindSpeedMS": 3.2, "WindGust": 5.0, "WindDirection": 125.0, "Humidity": 67.0, "Visibility": 25000.0, "TotalCloudCover": 6.0, "Precipitation1h": 0.0, "SnowDepth": 0.0}
+  ]
+}

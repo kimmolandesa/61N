@@ -1,0 +1,33 @@
+{
+  "observer": {"lat": 60.17, "lon": 24.94, "alt_m": 0.0},
+  "days_ahead": 3,
+  "satellites_queried": 6,
+  "pass_count": 3,
+  "passes": [
+    {
+      "satellite": "Sentinel-1A", "norad_id": 40524, "sensor": "SAR",
+      "notes": "C-band radar · all-weather · day/night",
+      "start_utc": "2026-06-24T02:14:00+00:00",
+      "max_utc":   "2026-06-24T02:18:22+00:00",
+      "end_utc":   "2026-06-24T02:22:44+00:00",
+      "max_elevation_deg": 74.3, "start_azimuth": "NW", "duration_s": 524, "quality": "high"
+    },
+    {
+      "satellite": "Sentinel-2A", "norad_id": 40697, "sensor": "Optical",
+      "notes": "10 m multispectral · daylight only",
+      "start_utc": "2026-06-24T09:42:00+00:00",
+      "max_utc":   "2026-06-24T09:45:30+00:00",
+      "end_utc":   "2026-06-24T09:49:00+00:00",
+      "max_elevation_deg": 38.1, "start_azimuth": "SW", "duration_s": 420, "quality": "medium"
+    },
+    {
+      "satellite": "Landsat-9", "norad_id": 49260, "sensor": "Optical",
+      "notes": "30 m multispectral · daylight only",
+      "start_utc": "2026-06-25T09:21:00+00:00",
+      "max_utc":   "2026-06-25T09:24:10+00:00",
+      "end_utc":   "2026-06-25T09:27:20+00:00",
+      "max_elevation_deg": 22.7, "start_azimuth": "S", "duration_s": 380, "quality": "low"
+    }
+  ],
+  "errors": null
+}

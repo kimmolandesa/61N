@@ -1,0 +1,16 @@
+{
+  "mobility_wheeled": "good",
+  "mobility_tracked": "good",
+  "aviation_rotary": "good",
+  "drone_ops": "good",
+  "visibility": "clear",
+  "reason": "Conditions normal",
+  "raw": {
+    "temperature_c": 15.8,
+    "wind_ms": 3.1,
+    "gust_ms": 5.2,
+    "visibility_m": 18000,
+    "snow_depth_cm": 0.0,
+    "rain_mmh": 0.0
+  }
+}

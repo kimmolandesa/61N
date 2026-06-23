@@ -9,7 +9,9 @@ from scipy.ndimage import map_coordinates, zoom
 from shapely.geometry import box, shape
 
 from core import dem as dem_mod
+from core.config import settings
 from core.db import get_pool
+from mock import get_fixture
 
 
 # ── Raster helpers ────────────────────────────────────────────────────────────
@@ -145,6 +147,9 @@ def _classify(landcover: str, slope_deg: float) -> dict:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def get_elevation(lat: float, lon: float) -> dict:
+    if settings.MOCK_MODE:
+        return get_fixture("terrain_elevation")
+
     return {
         'lat': lat,
         'lon': lon,
@@ -157,6 +162,9 @@ async def get_elevation_profile(
     end_lat: float, end_lon: float,
     samples: int = 100,
 ) -> dict:
+    if settings.MOCK_MODE:
+        return get_fixture("terrain_elevation_profile")
+
     west  = min(start_lon, end_lon) - 0.01
     east  = max(start_lon, end_lon) + 0.01
     south = min(start_lat, end_lat) - 0.01
@@ -208,6 +216,9 @@ async def get_terrain_cover(bbox: tuple[float, float, float, float]) -> dict:
     Grid resolution adapts to bbox size (100–500 m cells, max 100×100 grid).
     Slope from DEM + landcover from PostGIS OSM are cross-referenced per cell.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("terrain_cover")
+
     west, south, east, north = bbox
 
     # ── 1. OSM landcover polygons ─────────────────────────────────────────────

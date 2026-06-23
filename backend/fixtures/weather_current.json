@@ -1,0 +1,22 @@
+{
+  "bbox": [24.80, 60.10, 25.10, 60.35],
+  "count": 2,
+  "observations": [
+    {
+      "lat": 60.3273, "lon": 24.9584, "time": 1750723200.0,
+      "temperature": 14.2, "windspeedms": 3.1, "windgust": 5.2,
+      "winddirection": 220.0, "humidity": 72.0,
+      "visibility": 18000.0, "totalcloudcover": 4.0,
+      "rain": 0.0, "snowdepth": 0.0,
+      "station": "Helsinki-Vantaa"
+    },
+    {
+      "lat": 60.1756, "lon": 24.9462, "time": 1750723200.0,
+      "temperature": 15.8, "windspeedms": 2.4, "windgust": 3.8,
+      "winddirection": 195.0, "humidity": 65.0,
+      "visibility": 22000.0, "totalcloudcover": 3.0,
+      "rain": 0.0, "snowdepth": 0.0,
+      "station": "Helsinki Kaisaniemi"
+    }
+  ]
+}

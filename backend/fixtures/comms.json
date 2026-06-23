@@ -1,0 +1,54 @@
+{
+  "towers": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [24.9450, 60.1698]},
+        "properties": {
+          "radio": "NR", "mcc": 244, "mnc": 3, "operator": "DNA",
+          "lac": 0, "cellid": 100101,
+          "avg_signal_dbm": -78, "coverage_radius_m": 1200, "range_source": "api"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [24.9280, 60.1590]},
+        "properties": {
+          "radio": "LTE", "mcc": 244, "mnc": 5, "operator": "Elisa",
+          "lac": 6201, "cellid": 204881,
+          "avg_signal_dbm": -85, "coverage_radius_m": 5000, "range_source": "api"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [24.9612, 60.1830]},
+        "properties": {
+          "radio": "LTE", "mcc": 244, "mnc": 91, "operator": "Telia",
+          "lac": 8100, "cellid": 318442,
+          "avg_signal_dbm": -91, "coverage_radius_m": 5000, "range_source": "fallback"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [24.9800, 60.2050]},
+        "properties": {
+          "radio": "LTE", "mcc": 244, "mnc": 12, "operator": "DNA",
+          "lac": 6201, "cellid": 404921,
+          "avg_signal_dbm": -88, "coverage_radius_m": 4200, "range_source": "api"
+        }
+      },
+      {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [24.8960, 60.1430]},
+        "properties": {
+          "radio": "GSM", "mcc": 244, "mnc": 91, "operator": "Telia",
+          "lac": 8100, "cellid": 511002,
+          "avg_signal_dbm": -95, "coverage_radius_m": 10000, "range_source": "fallback"
+        }
+      }
+    ],
+    "metadata": {"tower_count": 5, "truncated": false, "source": "OpenCellID"}
+  },
+  "summary": "5 towers found in area"
+}

@@ -1,0 +1,11 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9360, 60.1680]}, "properties": {"osm_id": "34112981", "name": "Helsinki University Hospital", "category": "hospital", "type": "medical"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9250, 60.1520]}, "properties": {"osm_id": "34229104", "name": "Meilahden terveyskeskus", "category": "clinic", "type": "medical"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9010, 60.1410]}, "properties": {"osm_id": "34445621", "name": "ABC Lauttasaari", "category": "fuel", "type": "fuel"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9630, 60.2110]}, "properties": {"osm_id": "34680032", "name": "Neste Pasila", "category": "fuel", "type": "fuel"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9880, 60.1980]}, "properties": {"osm_id": "34781204", "name": "ST1 Sörnäinen", "category": "fuel", "type": "fuel"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [24.9120, 60.1590]}, "properties": {"osm_id": "35002981", "name": "Hietaniemi drinking water", "category": "drinking_water", "type": "water"}}
+  ]
+}

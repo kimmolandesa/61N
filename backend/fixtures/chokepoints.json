@@ -1,0 +1,44 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "LineString", "coordinates": [[24.9350,60.1670],[24.9370,60.1680],[24.9390,60.1690]]},
+      "properties": {
+        "rank": 1, "criticality_score": 0.004821, "osm_id": 24887441,
+        "name": "Pitkäsilta", "highway": "primary", "bridge": true, "tunnel": false,
+        "length_m": 218.4, "type": "bridge",
+        "max_total_mass_t": null, "max_axle_load_t": null,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck","tracked_ifv","mbt"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)","Tracked IFV (≤40 t, e.g. CV90)","MBT (≤65 t, e.g. Leopard 2)"],
+        "blocks_mbt": false, "blocks_heavy_truck": false
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "LineString", "coordinates": [[24.9200,60.1550],[24.9210,60.1530],[24.9220,60.1510]]},
+      "properties": {
+        "rank": 2, "criticality_score": 0.003614, "osm_id": 25112984,
+        "name": "Länsisatamankatu", "highway": "secondary", "bridge": false, "tunnel": true,
+        "length_m": 340.0, "type": "tunnel",
+        "max_total_mass_t": null, "max_axle_load_t": null,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck","tracked_ifv","mbt"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)","Tracked IFV (≤40 t, e.g. CV90)","MBT (≤65 t, e.g. Leopard 2)"],
+        "blocks_mbt": false, "blocks_heavy_truck": false
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "LineString", "coordinates": [[24.9550,60.1880],[24.9560,60.1900]]},
+      "properties": {
+        "rank": 3, "criticality_score": 0.002907, "osm_id": 26443120,
+        "name": "Sörnäistenranta", "highway": "tertiary", "bridge": false, "tunnel": false,
+        "length_m": 124.8, "type": "road_bottleneck",
+        "max_total_mass_t": null, "max_axle_load_t": null,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck","tracked_ifv","mbt"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)","Tracked IFV (≤40 t, e.g. CV90)","MBT (≤65 t, e.g. Leopard 2)"],
+        "blocks_mbt": false, "blocks_heavy_truck": false
+      }
+    }
+  ]
+}

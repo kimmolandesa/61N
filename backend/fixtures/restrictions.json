@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "LineString", "coordinates": [[24.8820,60.1320],[24.8830,60.1310],[24.8840,60.1300]]},
+      "properties": {
+        "link_id": "1001882", "kuntakoodi": "091", "vaik_suunt": 2,
+        "single_vehicle_t": 20.0, "combination_t": 40.0, "axle_t": 8.0, "bogie_t": null,
+        "passable_by": ["light_wheeled","apc_wheeled"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)"],
+        "blocks_mbt": true, "blocks_heavy_truck": true
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "LineString", "coordinates": [[25.0100,60.2200],[25.0120,60.2220]]},
+      "properties": {
+        "link_id": "1009321", "kuntakoodi": "091", "vaik_suunt": 1,
+        "single_vehicle_t": 32.0, "combination_t": 56.0, "axle_t": 10.0, "bogie_t": 16.0,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)"],
+        "blocks_mbt": true, "blocks_heavy_truck": true
+      }
+    }
+  ],
+  "metadata": {
+    "restriction_count": 2,
+    "vehicle_classes": {
+      "light_wheeled": "Light wheeled (≤12 t)", "apc_wheeled": "Wheeled APC/IFV (≤28 t, e.g. AMV)",
+      "medium_truck": "Medium truck (≤32 t)", "heavy_truck": "Heavy logistics (≤44 t)",
+      "tracked_ifv": "Tracked IFV (≤40 t, e.g. CV90)", "mbt": "MBT (≤65 t, e.g. Leopard 2)"
+    },
+    "source": "Väylä Digiroad",
+    "note": "Segments without restrictions meet Finnish standard (76t combo / 13t axle)"
+  }
+}

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Query
+from core.config import settings
 from core.db import get_pool
+from mock import get_fixture
 import json
 
 router = APIRouter()
@@ -13,6 +15,9 @@ async def get_features_bbox(
     layer: str = Query("all"),
     limit: int = Query(1000)
 ):
+    if settings.MOCK_MODE:
+        return get_fixture("features")
+
     pool = await get_pool()
 
     layer_filter = {

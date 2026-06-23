@@ -6,6 +6,8 @@ from urllib.parse import urlencode
 import httpx
 
 from core.cache import TTLCache
+from core.config import settings
+from mock import get_fixture
 
 FMI_WFS_BASE = "https://opendata.fmi.fi/wfs"
 TIMEOUT_S = 20.0
@@ -211,6 +213,9 @@ def _assess(cond: dict) -> dict:
 
 async def get_observations(bbox: tuple[float, float, float, float]) -> list[dict]:
     """Current weather from FMI stations within bbox (last 60 minutes)."""
+    if settings.MOCK_MODE:
+        return get_fixture("weather_current")["observations"]
+
     key = f"obs:{bbox}"
     cached = _cache.get(key)
     if cached is not None:
@@ -233,6 +238,9 @@ async def get_observations(bbox: tuple[float, float, float, float]) -> list[dict
 
 async def get_forecast(lat: float, lon: float, hours: int = 72) -> list[dict]:
     """HARMONIE forecast for a point (up to 72h, 1h timesteps)."""
+    if settings.MOCK_MODE:
+        return get_fixture("weather_forecast")["forecast"]
+
     key = f"forecast:{lat:.2f}:{lon:.2f}:{hours}"
     cached = _cache.get(key)
     if cached is not None:
@@ -257,6 +265,9 @@ async def get_impact(bbox: tuple[float, float, float, float]) -> dict:
     Operational weather impact for the area.
     Uses worst-case conditions from the next 24h HARMONIE forecast.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("weather_impact")
+
     key = f"impact:{bbox}"
     cached = _cache.get(key)
     if cached is not None:

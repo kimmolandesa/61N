@@ -1,0 +1,18 @@
+{
+  "start": {"lat": 60.16, "lon": 24.92},
+  "end":   {"lat": 60.18, "lon": 24.96},
+  "total_distance_m": 3180,
+  "samples": 10,
+  "profile": [
+    {"distance_m": 0.0,    "elevation_m": 18.2},
+    {"distance_m": 353.3,  "elevation_m": 21.4},
+    {"distance_m": 706.7,  "elevation_m": 26.1},
+    {"distance_m": 1060.0, "elevation_m": 31.8},
+    {"distance_m": 1413.3, "elevation_m": 38.5},
+    {"distance_m": 1766.7, "elevation_m": 33.2},
+    {"distance_m": 2120.0, "elevation_m": 27.6},
+    {"distance_m": 2473.3, "elevation_m": 22.1},
+    {"distance_m": 2826.7, "elevation_m": 17.4},
+    {"distance_m": 3180.0, "elevation_m": 14.8}
+  ]
+}

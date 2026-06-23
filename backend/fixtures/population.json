@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "total_population": 3272, "cell_count": 8,
+    "cell_resolution_km": 1, "source": "Statistics Finland (Stat.fi) 2022"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.90,60.16],[24.91,60.16],[24.91,60.17],[24.90,60.17],[24.90,60.16]]]},
+      "properties": {"population": 782, "density_class": "urban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.91,60.16],[24.92,60.16],[24.92,60.17],[24.91,60.17],[24.91,60.16]]]},
+      "properties": {"population": 634, "density_class": "urban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.92,60.16],[24.93,60.16],[24.93,60.17],[24.92,60.17],[24.92,60.16]]]},
+      "properties": {"population": 541, "density_class": "urban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.93,60.16],[24.94,60.16],[24.94,60.17],[24.93,60.17],[24.93,60.16]]]},
+      "properties": {"population": 428, "density_class": "suburban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.94,60.16],[24.95,60.16],[24.95,60.17],[24.94,60.17],[24.94,60.16]]]},
+      "properties": {"population": 312, "density_class": "suburban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.95,60.16],[24.96,60.16],[24.96,60.17],[24.95,60.17],[24.95,60.16]]]},
+      "properties": {"population": 487, "density_class": "suburban"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.96,60.16],[24.97,60.16],[24.97,60.17],[24.96,60.17],[24.96,60.16]]]},
+      "properties": {"population": 88, "density_class": "rural"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.97,60.16],[24.98,60.16],[24.98,60.17],[24.97,60.17],[24.97,60.16]]]},
+      "properties": {"population": 0, "density_class": "uninhabited"}
+    }
+  ]
+}

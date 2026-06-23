@@ -1,0 +1,54 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [24.9360, 60.1675]},
+      "properties": {
+        "name": "Pitkäsilta", "bridge_id": "H-1201", "bridge_code": "H-1201",
+        "owner": "Helsinki", "purpose": "road",
+        "max_total_mass_t": null, "max_axle_load_t": null, "restricted": false,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck","tracked_ifv","mbt"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)","Tracked IFV (≤40 t, e.g. CV90)","MBT (≤65 t, e.g. Leopard 2)"],
+        "blocks_mbt": false, "blocks_heavy_truck": false,
+        "source": "Väylä Taitorakennerekisteri"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [24.9120, 60.1430]},
+      "properties": {
+        "name": "Lauttasaarensilta", "bridge_id": "H-0882", "bridge_code": "H-0882",
+        "owner": "Helsinki", "purpose": "road",
+        "max_total_mass_t": 44.0, "max_axle_load_t": 11.5, "restricted": true,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)"],
+        "blocks_mbt": true, "blocks_heavy_truck": false,
+        "source": "Väylä Taitorakennerekisteri"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [24.9540, 60.1580]},
+      "properties": {
+        "name": "Hakaniemensilta", "bridge_id": "H-1144", "bridge_code": "H-1144",
+        "owner": "Helsinki", "purpose": "road",
+        "max_total_mass_t": null, "max_axle_load_t": null, "restricted": false,
+        "passable_by": ["light_wheeled","apc_wheeled","medium_truck","heavy_truck","tracked_ifv","mbt"],
+        "passable_labels": ["Light wheeled (≤12 t)","Wheeled APC/IFV (≤28 t, e.g. AMV)","Medium truck (≤32 t)","Heavy logistics (≤44 t)","Tracked IFV (≤40 t, e.g. CV90)","MBT (≤65 t, e.g. Leopard 2)"],
+        "blocks_mbt": false, "blocks_heavy_truck": false,
+        "source": "Väylä Taitorakennerekisteri"
+      }
+    }
+  ],
+  "metadata": {
+    "bridge_count": 3,
+    "vehicle_classes": {
+      "light_wheeled": "Light wheeled (≤12 t)", "apc_wheeled": "Wheeled APC/IFV (≤28 t, e.g. AMV)",
+      "medium_truck": "Medium truck (≤32 t)", "heavy_truck": "Heavy logistics (≤44 t)",
+      "tracked_ifv": "Tracked IFV (≤40 t, e.g. CV90)", "mbt": "MBT (≤65 t, e.g. Leopard 2)"
+    },
+    "source": "Väylä (Finnish Transport Infrastructure Agency)",
+    "note": "null load fields = no posted restriction = Finnish standard applies (76t/13t axle)"
+  }
+}

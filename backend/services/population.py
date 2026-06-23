@@ -4,6 +4,8 @@ import httpx
 from pyproj import Transformer
 
 from core.cache import TTLCache
+from core.config import settings
+from mock import get_fixture
 
 STATFI_WFS = "https://geo.stat.fi/geoserver/vaestoruutu/wfs"
 TIMEOUT_S = 20.0
@@ -43,6 +45,9 @@ async def get_population_grid(bbox: tuple[float, float, float, float]) -> dict:
     Returns GeoJSON FeatureCollection with population count and density class per cell.
     Response is cached for 24 hours.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("population")
+
     key = f"pop:{bbox}"
     cached = _cache.get(key)
     if cached is not None:

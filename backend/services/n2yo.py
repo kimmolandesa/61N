@@ -4,6 +4,7 @@ import httpx
 
 from core.cache import TTLCache
 from core.config import settings
+from mock import get_fixture
 
 N2YO_BASE = "https://api.n2yo.com/rest/v1/satellite"
 TIMEOUT_S = 15.0
@@ -63,6 +64,9 @@ async def get_satellite_passes(
     Results are cached for 30 minutes (orbital mechanics don't change
     minute-to-minute but TLE updates matter over hours).
     """
+    if settings.MOCK_MODE:
+        return get_fixture("satellites")
+
     if not settings.N2YO_API_KEY:
         return {
             'error': 'N2YO_API_KEY not configured',

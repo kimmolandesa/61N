@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     N2YO_API_KEY: str = ""
     TILE_CACHE_DIR: str = "/data/tile_cache"
     DEM_VRT_PATH: str = "/data/dem/finland.vrt"
+    MOCK_MODE: bool = False
 
     class Config:
         env_file = ".env"

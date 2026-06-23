@@ -1,0 +1,35 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.90,60.16],[24.92,60.16],[24.92,60.18],[24.90,60.18],[24.90,60.16]]]},
+      "properties": {"cover_class": "urban", "movement_factor_wheeled": 0.35, "movement_factor_tracked": 0.25, "concealment_from_air": "low", "concealment_from_ground": "high"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.92,60.16],[24.94,60.16],[24.94,60.18],[24.92,60.18],[24.92,60.16]]]},
+      "properties": {"cover_class": "dense_forest", "movement_factor_wheeled": 0.25, "movement_factor_tracked": 0.35, "concealment_from_air": "high", "concealment_from_ground": "high"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.94,60.16],[24.96,60.16],[24.96,60.18],[24.94,60.18],[24.94,60.16]]]},
+      "properties": {"cover_class": "open", "movement_factor_wheeled": 0.75, "movement_factor_tracked": 0.85, "concealment_from_air": "low", "concealment_from_ground": "low"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.96,60.16],[24.98,60.16],[24.98,60.18],[24.96,60.18],[24.96,60.16]]]},
+      "properties": {"cover_class": "water", "movement_factor_wheeled": 0.0, "movement_factor_tracked": 0.0, "concealment_from_air": "low", "concealment_from_ground": "low"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.90,60.18],[24.92,60.18],[24.92,60.20],[24.90,60.20],[24.90,60.18]]]},
+      "properties": {"cover_class": "sparse_forest", "movement_factor_wheeled": 0.45, "movement_factor_tracked": 0.60, "concealment_from_air": "medium", "concealment_from_ground": "medium"}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Polygon", "coordinates": [[[24.92,60.18],[24.94,60.18],[24.94,60.20],[24.92,60.20],[24.92,60.18]]]},
+      "properties": {"cover_class": "wetland", "movement_factor_wheeled": 0.05, "movement_factor_tracked": 0.20, "concealment_from_air": "low", "concealment_from_ground": "low"}
+    }
+  ]
+}

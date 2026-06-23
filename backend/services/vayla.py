@@ -5,6 +5,8 @@ from urllib.parse import urlencode
 import httpx
 
 from core.cache import TTLCache
+from core.config import settings
+from mock import get_fixture
 
 DIGIROAD_BASE = "https://avoinapi.vaylapilvi.fi/vaylatiedot/digiroad/ogc/features/v1"
 TAITORAKENTEET_BASE = "https://avoinapi.vaylapilvi.fi/vaylatiedot/ogc/features/v1"
@@ -88,6 +90,9 @@ async def get_weight_restrictions(bbox: tuple[float, float, float, float]) -> di
       blocks_mbt, blocks_heavy_truck: quick flags
     Cached 24 hours.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("restrictions")
+
     west, south, east, north = bbox
     key = f"vayla_restr:{west:.3f}:{south:.3f}:{east:.3f}:{north:.3f}"
     cached = _cache.get(key)
@@ -196,6 +201,9 @@ async def get_bridges(bbox: tuple[float, float, float, float]) -> dict:
     they indicate a posted restriction below Finnish standard.
     Cached 24 hours.
     """
+    if settings.MOCK_MODE:
+        return get_fixture("bridges")
+
     west, south, east, north = bbox
     key = f"vayla_bridge:{west:.3f}:{south:.3f}:{east:.3f}:{north:.3f}"
     cached = _cache.get(key)
